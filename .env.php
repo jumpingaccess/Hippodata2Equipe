@@ -1,0 +1,14 @@
+<?php
+// .env.php.example - Template pour le fichier de configuration
+// Copier ce fichier vers .env.php et remplir avec vos vraies clés
+
+return [
+    // Clé secrète JWT fournie par Equipe pour décoder les tokens
+    'EQUIPE_SECRET' => 'vabGHxF2QdDQt9R1',
+    
+    // Token Bearer pour l'authentification avec l'API Hippodata
+    'HIPPODATA_BEARER' => '9511562afc502fc009d30611036a185f',
+
+    // DEBUG Inormation On/Off
+    'DEBUG' => 1,
+];
