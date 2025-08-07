@@ -264,6 +264,350 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         exit;
     }
     
+    // Nouvelle action pour importer les résultats
+    if ($_POST['action'] === 'import_results') {
+        if ($debugMode) {
+            error_log("Import results action triggered");
+        }
+        
+        $eventId = $_POST['event_id'] ?? '';
+        $apiKey = $_POST['api_key'] ?? '';
+        $meetingUrl = $_POST['meeting_url'] ?? '';
+        $competitions = json_decode($_POST['competitions'] ?? '[]', true);
+        
+        if ($debugMode) {
+            error_log("Event ID: " . $eventId);
+            error_log("Meeting URL: " . $meetingUrl);
+            error_log("Competitions count: " . count($competitions));
+        }
+        
+        if (empty($eventId) || empty($competitions)) {
+            echo json_encode(['success' => false, 'error' => 'Event ID and competitions are required']);
+            exit;
+        }
+        
+        try {
+            $allBatchData = [];
+            $processedCompetitions = [];
+            
+            // Pour chaque compétition, récupérer les résultats
+            foreach ($competitions as $comp) {
+                $classId = $comp['class_id'];
+                $competitionForeignId = $comp['foreign_id'];
+                
+                if ($debugMode) {
+                    error_log("Processing results for competition: " . $comp['name'] . " (class_id: " . $classId . ")");
+                }
+                
+                // Récupérer les résultats depuis Hippodata
+                $url = "https://api.hippo-server.net/scoring/event/{$eventId}/resultlist/{$classId}";
+                
+                $ch = curl_init($url);
+                curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+                curl_setopt($ch, CURLOPT_HTTPHEADER, [
+                    "Authorization: Bearer " . ($_ENV['HIPPODATA_BEARER'] ?? ''),
+                    "Accept: application/json"
+                ]);
+                curl_setopt($ch, CURLOPT_TIMEOUT, 15);
+                
+                $response = curl_exec($ch);
+                $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+                $curlError = curl_error($ch);
+                curl_close($ch);
+                
+                if ($httpCode !== 200) {
+                    if ($debugMode) {
+                        error_log("Failed to fetch results for class $classId (HTTP $httpCode)");
+                    }
+                    $processedCompetitions[] = [
+                        'name' => $comp['name'],
+                        'foreign_id' => $competitionForeignId,
+                        'results_count' => 0,
+                        'error' => "Failed to fetch results (HTTP $httpCode)"
+                    ];
+                    continue;
+                }
+                
+                $resultsData = json_decode($response, true);
+                
+                if (!isset($resultsData['CLASS']['COMPETITORS']['COMPETITOR'])) {
+                    if ($debugMode) {
+                        error_log("No results found for class $classId");
+                    }
+                    $processedCompetitions[] = [
+                        'name' => $comp['name'],
+                        'foreign_id' => $competitionForeignId,
+                        'results_count' => 0,
+                        'error' => "No results in resultlist"
+                    ];
+                    continue;
+                }
+                
+                // Préparer les données de temps autorisé pour la compétition
+                $competitionUpdate = [];
+                if (isset($resultsData['CLASS']['TIME1_ALLOWED'])) {
+                    $competitionUpdate['grundt'] = (int)$resultsData['CLASS']['TIME1_ALLOWED'];
+                }
+                if (isset($resultsData['CLASS']['TIME2_ALLOWED'])) {
+                    $competitionUpdate['omh1t'] = (int)$resultsData['CLASS']['TIME2_ALLOWED'];
+                }
+                // Ajouter d'autres temps autorisés si disponibles dans l'API
+                if (isset($resultsData['CLASS']['TIME3_ALLOWED'])) {
+                    $competitionUpdate['omh2t'] = (int)$resultsData['CLASS']['TIME3_ALLOWED'];
+                }
+                if (isset($resultsData['CLASS']['TIME4_ALLOWED'])) {
+                    $competitionUpdate['omg3t'] = (int)$resultsData['CLASS']['TIME4_ALLOWED'];
+                }
+                if (isset($resultsData['CLASS']['TIME5_ALLOWED'])) {
+                    $competitionUpdate['omg4t'] = (int)$resultsData['CLASS']['TIME5_ALLOWED'];
+                }
+                if (isset($resultsData['CLASS']['TIME6_ALLOWED'])) {
+                    $competitionUpdate['omg5t'] = (int)$resultsData['CLASS']['TIME6_ALLOWED'];
+                }
+                
+                $results = [];
+                
+                // Traiter chaque concurrent
+                $competitors = $resultsData['CLASS']['COMPETITORS']['COMPETITOR'];
+                
+                // S'assurer que c'est un tableau d'arrays
+                if (isset($competitors['RIDER'])) {
+                    // Un seul concurrent, le mettre dans un tableau
+                    $competitors = [$competitors];
+                }
+                
+                foreach ($competitors as $competitor) {
+                    $rider = $competitor['RIDER'] ?? [];
+                    $horse = $competitor['HORSE'] ?? [];
+                    
+                    $riderFeiId = $rider['RFEI_ID'] ?? null;
+                    $horseFeiId = $horse['HFEI_ID'] ?? null;
+                    
+                    if (!$riderFeiId || !$horseFeiId) {
+                        continue; // Skip si pas d'identifiants
+                    }
+                    
+                    // Préparer le résultat
+                    $result = [
+                        'foreign_id' => $riderFeiId . '_' . $horseFeiId . '_' . $competitionForeignId,
+                        'rider' => ['foreign_id' => $riderFeiId],
+                        'horse' => ['foreign_id' => $horseFeiId],
+                        'rid' => true,
+                        'result_at' => date('Y-m-d H:i:s'),
+                        'last_result_at' => date('Y-m-d H:i:s')
+                    ];
+                    
+                    // Traiter les résultats par round
+                    $resultDetails = $competitor['RESULT'] ?? [];
+                    $resultTotal = $competitor['RESULTTOTAL'][0] ?? [];
+                    
+                    // Initialiser les valeurs par défaut
+                    $result['ord'] = (int)($competitor['SORTORDER'] ?? 1000);
+                    $result['st'] = (string)($competitor['SORTORDER'] ?? '1');
+                    
+                    // Mapper les résultats selon les rounds
+                    foreach ($resultDetails as $roundResult) {
+                        $round = $roundResult['ROUND'] ?? 0;
+                        $faults = (float)($roundResult['FAULTS'] ?? 0);
+                        $time = (float)($roundResult['TIME'] ?? 0);
+                        $timeFaults = (float)($roundResult['TIMEFAULTS'] ?? 0);
+                        
+                        switch ($round) {
+                            case 1: // Round 1
+                                $result['grundf'] = $faults;
+                                $result['grundt'] = $time;
+                                $result['tfg'] = $timeFaults;
+                                // Si c'est une compétition par équipe, on peut ajouter round1_in_team
+                                if (isset($roundResult['IN_TEAM'])) {
+                                    $result['round1_in_team'] = (float)$roundResult['IN_TEAM'];
+                                }
+                                break;
+                                
+                            case 2: // Round 2 (Jump-off ou 2ème manche)
+                                $result['omh1f'] = $faults;
+                                $result['omh1t'] = $time;
+                                $result['tf1'] = $timeFaults;
+                                if (isset($roundResult['IN_TEAM'])) {
+                                    $result['round2_in_team'] = (float)$roundResult['IN_TEAM'];
+                                }
+                                break;
+                                
+                            case 3: // Round 3
+                                $result['omh2f'] = $faults;
+                                $result['omh2t'] = $time;
+                                $result['tf2'] = $timeFaults;
+                                if (isset($roundResult['IN_TEAM'])) {
+                                    $result['round3_in_team'] = (float)$roundResult['IN_TEAM'];
+                                }
+                                break;
+                                
+                            case 4: // Round 4
+                                $result['omg3f'] = $faults;
+                                $result['omg3t'] = $time;
+                                $result['tf3'] = $timeFaults;
+                                if (isset($roundResult['IN_TEAM'])) {
+                                    $result['round4_in_team'] = (float)$roundResult['IN_TEAM'];
+                                }
+                                break;
+                                
+                            case 5: // Round 5
+                                $result['omg4f'] = $faults;
+                                $result['omg4t'] = $time;
+                                $result['tf4'] = $timeFaults;
+                                if (isset($roundResult['IN_TEAM'])) {
+                                    $result['round5_in_team'] = (float)$roundResult['IN_TEAM'];
+                                }
+                                break;
+                                
+                            case 6: // Round 6
+                                $result['omg5f'] = $faults;
+                                $result['omg5t'] = $time;
+                                $result['tf5'] = $timeFaults;
+                                if (isset($roundResult['IN_TEAM'])) {
+                                    $result['round6_in_team'] = (float)$roundResult['IN_TEAM'];
+                                }
+                                break;
+                        }
+                    }
+                    
+                    // Ajouter le rang et les prix
+                    if (isset($resultTotal['RANK'])) {
+                        $result['re'] = (int)$resultTotal['RANK'];
+                    }
+                    
+                    if (isset($resultTotal['PRIZE']['MONEY'])) {
+                        $result['premie'] = (float)$resultTotal['PRIZE']['MONEY'];
+                        $result['premie_show'] = (float)$resultTotal['PRIZE']['MONEY'];
+                    }
+                    
+                    // Traiter les prix en nature
+                    if (isset($resultTotal['PRIZE']['TEXT']) && !isset($resultTotal['PRIZE']['MONEY'])) {
+                        // Si on a un texte de prix mais pas de montant, c'est peut-être un prix en nature
+                        $result['rtxt'] = $resultTotal['PRIZE']['TEXT'];
+                        $result['premie'] = 0;
+                        $result['premie_show'] = 0;
+                    }
+                    
+                    // Traiter les états spéciaux (retraité, éliminé, disqualifié)
+                    $status = $resultTotal['STATUS'] ?? 1;
+                    $state = $competitor['STATE'] ?? 0;
+                    
+                    // Vérifier si le cavalier a été éliminé, retraité, etc.
+                    // En se basant sur le STATUS et d'autres indicateurs
+                    if ($status != 1 || $state != 0) {
+                        // Chercher dans tous les rounds pour trouver où l'élimination s'est produite
+                        foreach ($resultDetails as $roundResult) {
+                            if (isset($roundResult['STATUS']) && $roundResult['STATUS'] != 1) {
+                                // Le cavalier a eu un problème dans ce round
+                                $roundStatus = $roundResult['STATUS'];
+                                
+                                // Mapper les statuts Hippodata vers Equipe
+                                // Ces mappings peuvent nécessiter des ajustements selon la documentation exacte
+                                if ($roundStatus == 2 || stripos($roundResult['NAME'] ?? '', 'retired') !== false) {
+                                    $result['or'] = 'U'; // Retired/Abandonné
+                                } elseif ($roundStatus == 3 || stripos($roundResult['NAME'] ?? '', 'eliminated') !== false) {
+                                    $result['or'] = 'D'; // Eliminated/Éliminé
+                                } elseif ($roundStatus == 4 || stripos($roundResult['NAME'] ?? '', 'disqualified') !== false) {
+                                    $result['or'] = 'S'; // Disqualified/Disqualifié
+                                }
+                                break;
+                            }
+                        }
+                    }
+                    
+                    // Vérifier les non-partants
+                    if (!isset($resultDetails[0]) || count($resultDetails) == 0) {
+                        // Pas de résultats du tout, peut-être non-partant
+                        if ($state == 1) {
+                            $result['a'] = 'Ö'; // Withdrawn/Forfait
+                        } elseif ($state == 2) {
+                            $result['a'] = 'U'; // No-show/Non-partant
+                        }
+                    }
+                    
+                    // Total des fautes
+                    $result['totfel'] = (float)($resultTotal['FAULTS'] ?? 0);
+                    
+                    // Ajouter des valeurs par défaut pour les champs manquants
+                    $result['k'] = 'H'; // Type: H pour Horse
+                    $result['av'] = 'A'; // Valeur par défaut
+                    
+                    $results[] = $result;
+                }
+                
+                if ($debugMode) {
+                    error_log("Competition " . $comp['name'] . ": " . count($results) . " results");
+                }
+                
+                // Préparer le batch data pour cette compétition
+                $batchData = [];
+                
+                // Mise à jour des temps autorisés de la compétition
+                if (!empty($competitionUpdate)) {
+                    $competitionUpdate['foreign_id'] = $competitionForeignId;
+                    $batchData['competitions'] = [
+                        'unique_by' => 'foreign_id',
+                        'records' => [$competitionUpdate]
+                    ];
+                }
+                
+                // Ajouter les résultats
+                if (!empty($results)) {
+                    $batchData['starts'] = [
+                        'unique_by' => 'foreign_id',
+                        'where' => [
+                            'competition' => [
+                                'foreign_id' => $competitionForeignId
+                            ]
+                        ],
+                        'replace' => true,
+                        'records' => $results
+                    ];
+                }
+                
+                if (!empty($batchData)) {
+                    $allBatchData[] = [
+                        'competition' => $comp['name'],
+                        'competition_foreign_id' => $competitionForeignId,
+                        'data' => $batchData
+                    ];
+                }
+                
+                $processedCompetitions[] = [
+                    'name' => $comp['name'],
+                    'foreign_id' => $competitionForeignId,
+                    'results_count' => count($results),
+                    'time_allowed' => $competitionUpdate['grundt'] ?? null,
+                    'time_allowed_jumpoff' => $competitionUpdate['omh1t'] ?? null,
+                    'time_allowed_round3' => $competitionUpdate['omh2t'] ?? null,
+                    'time_allowed_round4' => $competitionUpdate['omg3t'] ?? null,
+                    'time_allowed_round5' => $competitionUpdate['omg4t'] ?? null,
+                    'time_allowed_round6' => $competitionUpdate['omg5t'] ?? null,
+                    'rounds' => $resultsData['CLASS']['ROUNDS'] ?? [],
+                    'status' => $resultsData['CLASS']['STATUS'] ?? 'unknown'
+                ];
+            }
+            
+            if ($debugMode) {
+                error_log("Total processed: " . count($processedCompetitions) . " competitions");
+            }
+            
+            echo json_encode([
+                'success' => true,
+                'message' => 'Results ready for import',
+                'processedCompetitions' => $processedCompetitions,
+                'batchData' => $allBatchData
+            ]);
+            
+        } catch (Exception $e) {
+            if ($debugMode) {
+                error_log("Exception in import_results: " . $e->getMessage());
+            }
+            echo json_encode(['success' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+    
     // Nouvelle action pour importer les startlists
     if ($_POST['action'] === 'import_startlists') {
         if ($debugMode) {
@@ -626,8 +970,8 @@ if ($decoded && isset($decoded->payload->target)) {
                     </div>
                     <div style="margin-bottom: 10px;">
                         <label style="font-weight: normal;">
-                            <input type="checkbox" id="importResults" name="import_results" disabled>
-                            Import results (not available yet)
+                            <input type="checkbox" id="importResults" name="import_results">
+                            Import results
                         </label>
                     </div>
                 </div>
@@ -777,6 +1121,11 @@ if ($decoded && isset($decoded->payload->target)) {
                                     setTimeout(function() {
                                         importStartlistsAutomatically();
                                     }, 1000);
+                                } else if (importOptions.results && savedEventId && savedCompetitions.length > 0) {
+                                    // Si on doit importer seulement les résultats (sans startlists)
+                                    setTimeout(function() {
+                                        importResultsAutomatically();
+                                    }, 1000);
                                 } else {
                                     // Sinon, afficher le bouton pour import manuel
                                     $('#importStartlistsButton').show();
@@ -795,8 +1144,8 @@ if ($decoded && isset($decoded->payload->target)) {
                             button.prop('disabled', false).text('Start Import Process');
                         }
                     });
-                } else if (importOptions.startlists) {
-                    // Si on veut seulement importer les startlists sans les classes
+                } else if (importOptions.startlists || importOptions.results) {
+                    // Si on veut importer les startlists et/ou résultats sans les classes
                     // Il faut d'abord récupérer les données depuis Hippodata
                     alertDiv.text('Fetching competition data from Hippodata...').show();
                     
@@ -817,10 +1166,16 @@ if ($decoded && isset($decoded->payload->target)) {
                                 savedCompetitions = response.competitions;
                                 
                                 alertDiv.removeClass('alert-danger').addClass('alert-info');
-                                alertDiv.text('Competition data retrieved. Fetching startlists...').show();
                                 
-                                // Importer directement les startlists
-                                importStartlistsAutomatically();
+                                if (importOptions.startlists) {
+                                    alertDiv.text('Competition data retrieved. Fetching startlists...').show();
+                                    // Importer directement les startlists
+                                    importStartlistsAutomatically();
+                                } else if (importOptions.results) {
+                                    alertDiv.text('Competition data retrieved. Fetching results...').show();
+                                    // Importer directement les résultats
+                                    importResultsAutomatically();
+                                }
                             } else {
                                 alertDiv.removeClass('alert-info').addClass('alert-danger');
                                 alertDiv.text('Error fetching competition data: ' + (response.error || 'Unknown error')).show();
@@ -971,6 +1326,8 @@ if ($decoded && isset($decoded->payload->target)) {
                     },
                     dataType: 'json',
                     success: function(response) {
+                        debugLog('Import results response:', response);
+                        
                         if (response.success) {
                             alertDiv.removeClass('alert-info alert-danger').addClass('alert-success');
                             alertDiv.text('Results fetched successfully. Importing to Equipe...').show();
@@ -982,8 +1339,35 @@ if ($decoded && isset($decoded->payload->target)) {
                             if (response.processedCompetitions) {
                                 response.processedCompetitions.forEach(function(comp) {
                                     let statusText = comp.results_count + ' results';
+                                    
+                                    // Ajouter les temps autorisés
+                                    let timeInfo = [];
                                     if (comp.time_allowed) {
-                                        statusText += ', Time allowed: ' + comp.time_allowed + 's';
+                                        timeInfo.push('R1: ' + comp.time_allowed + 's');
+                                    }
+                                    if (comp.time_allowed_jumpoff) {
+                                        timeInfo.push('JO: ' + comp.time_allowed_jumpoff + 's');
+                                    }
+                                    if (comp.time_allowed_round3) {
+                                        timeInfo.push('R3: ' + comp.time_allowed_round3 + 's');
+                                    }
+                                    if (comp.time_allowed_round4) {
+                                        timeInfo.push('R4: ' + comp.time_allowed_round4 + 's');
+                                    }
+                                    if (comp.time_allowed_round5) {
+                                        timeInfo.push('R5: ' + comp.time_allowed_round5 + 's');
+                                    }
+                                    if (comp.time_allowed_round6) {
+                                        timeInfo.push('R6: ' + comp.time_allowed_round6 + 's');
+                                    }
+                                    
+                                    if (timeInfo.length > 0) {
+                                        statusText += ', Time allowed: ' + timeInfo.join(' / ');
+                                    }
+                                    
+                                    // Ajouter le statut de la compétition
+                                    if (comp.status) {
+                                        statusText += ' [' + comp.status + ']';
                                     }
                                     
                                     resultsList.append(
@@ -996,6 +1380,9 @@ if ($decoded && isset($decoded->payload->target)) {
                             // Import results to Equipe
                             if (response.batchData && response.batchData.length > 0) {
                                 importResultsBatchesToEquipe(response.batchData);
+                            } else {
+                                alertDiv.text('No results to import.').show();
+                                $('#importButton').prop('disabled', false).text('Start Import Process');
                             }
                         } else {
                             alertDiv.removeClass('alert-info alert-success').addClass('alert-danger');
@@ -1075,13 +1462,37 @@ if ($decoded && isset($decoded->payload->target)) {
                 function checkComplete() {
                     if (processed === total) {
                         // Show final summary
+                        let summaryHtml = '<div style="margin-top: 20px; padding: 15px; background-color: #f8f9fa; border-radius: 4px;">';
+                        summaryHtml += '<h5>Results Import Summary</h5>';
+                        
                         if (failCount === 0) {
                             alertDiv.removeClass('alert-info alert-danger').addClass('alert-success');
                             alertDiv.text('All results imported successfully!').show();
+                            summaryHtml += '<p class="text-success">✓ All ' + successCount + ' competition results imported successfully!</p>';
                         } else {
                             alertDiv.removeClass('alert-info alert-success').addClass('alert-warning');
                             alertDiv.text(successCount + ' results imported successfully, ' + failCount + ' failed.').show();
+                            summaryHtml += '<p class="text-warning">⚠ ' + successCount + ' competition results imported successfully, ' + failCount + ' failed.</p>';
                         }
+                        
+                        // Count total results imported
+                        let totalResults = 0;
+                        batchDataArray.forEach(function(batch) {
+                            if (batch.data.starts && batch.data.starts.records) {
+                                totalResults += batch.data.starts.records.length;
+                            }
+                        });
+                        
+                        summaryHtml += '<div><strong>Total imported:</strong></div>';
+                        summaryHtml += '<ul>';
+                        summaryHtml += '<li>' + totalResults + ' individual results</li>';
+                        summaryHtml += '<li>' + successCount + ' competitions updated with results</li>';
+                        summaryHtml += '</ul>';
+                        
+                        summaryHtml += '</div>';
+                        
+                        // Ajouter le résumé après la liste des résultats
+                        $('#resultsImportList').after(summaryHtml);
                         
                         // Réactiver le bouton principal
                         $('#importButton').prop('disabled', false).text('Start Import Process');
@@ -1455,21 +1866,13 @@ if ($decoded && isset($decoded->payload->target)) {
                             $('#startlistResultList').after(simpleSummaryHtml);
                         }
                         
-                        // Réactiver le bouton principal avec le bon texte
-                        $('#importButton').prop('disabled', false).text('Start Import Process');
-                    }
-                }
-            }
-              function checkComplete() {
-                if (processed === total) {
-                    // ... code existant pour afficher le résumé ...
-                    
-                    // Appeler le callback si fourni
-                    if (typeof onCompleteCallback === 'function') {
-                        onCompleteCallback();
-                    } else {
-                        // Réactiver le bouton principal si pas de callback
-                        $('#importButton').prop('disabled', false).text('Start Import Process');
+                        // Appeler le callback si fourni
+                        if (typeof onCompleteCallback === 'function') {
+                            onCompleteCallback();
+                        } else {
+                            // Réactiver le bouton principal si pas de callback
+                            $('#importButton').prop('disabled', false).text('Start Import Process');
+                        }
                     }
                 }
             }
