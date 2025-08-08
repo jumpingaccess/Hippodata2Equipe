@@ -54,19 +54,18 @@ $debugMode = isset($_ENV['DEBUG']) && $_ENV['DEBUG'] == '1';
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     header('Content-Type: application/json');
     
-    if ($_POST['action'] === 'import_classes') {
-        $feiId = $_POST['fei_id'] ?? '';
-        $apiKey = $_POST['api_key'] ?? '';
-        $meetingUrl = $_POST['meeting_url'] ?? '';
+    // Nouvelle action pour récupérer les infos de l'event
+    if ($_POST['action'] === 'fetch_event_info') {
+        $showId = $_POST['show_id'] ?? '';
         
-        if (empty($feiId)) {
-            echo json_encode(['success' => false, 'error' => 'FEI ID is required']);
+        if (empty($showId)) {
+            echo json_encode(['success' => false, 'error' => 'Show ID is required']);
             exit;
         }
         
         try {
-            // 1. Récupérer les données depuis Hippodata
-            $hippodataUrl = "https://api.hippo-server.net/scoring/event/{$feiId}";
+            // Récupérer les données depuis Hippodata
+            $hippodataUrl = "https://api.hippo-server.net/scoring/event/{$showId}";
             
             $ch = curl_init($hippodataUrl);
             curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
@@ -85,129 +84,203 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             
             $hippodataData = json_decode($response, true);
             
-            // 2. Transformer les données pour Equipe
-            $competitions = [];
-            $counter = 1; // Compteur pour clabb
+            // Transformer les données pour l'affichage
+            $classes = [];
             
             foreach ($hippodataData['CLASSES']['CLASS'] ?? [] as $class) {
                 $name = !empty($class['NAME']) ? $class['NAME'] : $class['SPONSOR'];
                 
-                $competitions[] = [
-                    'foreign_id' => (string)$class['ID'], // Convertir en string
-                    'clabb' => 'HD-' . $counter, // Compteur d'épreuve avec préfixe HD-
-                    'klass' => $name, // Renommé de 'name' vers 'klass'
-                    'oeverskr1' => $name, // Même valeur que klass
-                    'datum' => $class['DATE'], // Renommé de 'starts_on' vers 'datum'
-                    'tavlingspl' => $class['CATEGORY'] ?? '', // Renommé de 'arena' vers 'tavlingspl'
-                    'z' => 'H',
-                    'x' => 'I',
-                    'premie_curr' => $class['PRIZE']['CURRENCY'] ?? 'EUR',
-                    'prsum1' => $class['PRIZE']['MONEY'] ?? 0
-                ];
-                
-                $counter++;
-            }
-            
-            // 3. Envoyer vers Equipe via Batch API
-            $batchData = [
-                'competitions' => [
-                    'unique_by' => 'foreign_id',
-                    'skip_user_changed' => true,
-                    'records' => $competitions
-                ]
-            ];
-            
-            // Générer un UUID pour la transaction
-            $transactionUuid = sprintf('%04x%04x-%04x-%04x-%04x-%04x%04x%04x',
-                mt_rand(0, 0xffff), mt_rand(0, 0xffff),
-                mt_rand(0, 0xffff),
-                mt_rand(0, 0x0fff) | 0x4000,
-                mt_rand(0, 0x3fff) | 0x8000,
-                mt_rand(0, 0xffff), mt_rand(0, 0xffff), mt_rand(0, 0xffff)
-            );
-            
-            $batchUrl = $meetingUrl . '/batch';
-            
-            // JSON qui sera envoyé à Equipe
-            $jsonToSend = json_encode($batchData);
-            
-            $ch = curl_init($batchUrl);
-            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-            curl_setopt($ch, CURLOPT_POST, true);
-            curl_setopt($ch, CURLOPT_POSTFIELDS, $jsonToSend);
-            curl_setopt($ch, CURLOPT_HTTPHEADER, [
-                "X-Api-Key: {$apiKey}",
-                "X-Transaction-Uuid: {$transactionUuid}",
-                "Accept: application/json",
-                "Content-Type: application/json"
-            ]);
-            
-            $equipeResponse = curl_exec($ch);
-            $equipeHttpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-            $curlError = curl_error($ch);
-            curl_close($ch);
-            
-            if ($equipeHttpCode !== 200 && $equipeHttpCode !== 201) {
-                // En cas d'erreur, on retourne quand même le JSON envoyé pour debug
-                $competitionsWithIds = [];
-                foreach ($competitions as $index => $comp) {
-                    $hippodataClass = $hippodataData['CLASSES']['CLASS'][$index] ?? null;
-                    $competitionsWithIds[] = [
-                        'foreign_id' => $comp['foreign_id'],
-                        'class_id' => $hippodataClass['NR'] ?? $hippodataClass['ID'] ?? '', // Utiliser NR en priorité
-                        'hippodata_id' => $hippodataClass['ID'] ?? '',
-                        'name' => $comp['klass']
-                    ];
-                }
-                echo json_encode([
-                    'success' => false, 
-                    'error' => "Failed to send to Equipe (HTTP {$equipeHttpCode})" . ($curlError ? " - {$curlError}" : ""),
-                    'eventId' => $hippodataData['EVENT']['ID'] ?? $feiId,
- 
-                    'competitions' => $competitionsWithIds,
-                    'transactionUuid' => $transactionUuid,
-                    'equipeResponse' => json_decode($equipeResponse, true) ?: $equipeResponse,
-                    'httpCode' => $equipeHttpCode,
-                    'batchUrl' => $batchUrl
-                ]);
-                exit;
-            }
-            
-            // Préparer la réponse avec les IDs corrects
-            $competitionsWithIds = [];
-            foreach ($competitions as $index => $comp) {
-                $hippodataClass = $hippodataData['CLASSES']['CLASS'][$index] ?? null;
-                $competitionsWithIds[] = [
-                    'foreign_id' => $comp['foreign_id'],
-                    'class_id' => $hippodataClass['NR'] ?? $hippodataClass['ID'] ?? '', // Utiliser NR si disponible
-                    'name' => $comp['klass']
+                $classes[] = [
+                    'id' => $class['ID'],
+                    'nr' => $class['NR'] ?? $class['ID'],
+                    'name' => $name,
+                    'date' => $class['DATE'],
+                    'category' => $class['CATEGORY'] ?? '',
+                    'prize_money' => $class['PRIZE']['MONEY'] ?? 0,
+                    'prize_currency' => $class['PRIZE']['CURRENCY'] ?? 'EUR',
+                    'status' => $class['STATUS'] ?? 'unknown'
                 ];
             }
             
             echo json_encode([
-                'success' => true, 
-                'message' => count($competitions) . ' competitions imported successfully',
-                'eventId' => $hippodataData['EVENT']['ID'] ?? $feiId,
-                'competitions' => $competitionsWithIds,
-                'transactionUuid' => $transactionUuid,
-                'equipeResponse' => json_decode($equipeResponse, true)
+                'success' => true,
+                'event' => [
+                    'id' => $hippodataData['EVENT']['ID'] ?? $showId,
+                    'name' => $hippodataData['EVENT']['NAME'] ?? '',
+                    'venue' => $hippodataData['EVENT']['VENUE'] ?? ''
+                ],
+                'classes' => $classes
             ]);
             
         } catch (Exception $e) {
-            // En cas d'exception, essayer de retourner le maximum d'infos pour debug
-            $response = ['success' => false, 'error' => $e->getMessage()];
+            echo json_encode(['success' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+    
+    // Action modifiée pour importer sélectivement
+    if ($_POST['action'] === 'import_selected') {
+        $showId = $_POST['show_id'] ?? '';
+        $apiKey = $_POST['api_key'] ?? '';
+        $meetingUrl = $_POST['meeting_url'] ?? '';
+        $selections = json_decode($_POST['selections'] ?? '[]', true);
+        
+        if (empty($showId) || empty($selections)) {
+            echo json_encode(['success' => false, 'error' => 'Show ID and selections are required']);
+            exit;
+        }
+        
+        try {
+            $results = [
+                'classes' => [],
+                'startlists' => [],
+                'results' => []
+            ];
             
-            // Si on a des competitions, les inclure même en cas d'erreur
-            if (isset($competitions)) {
-                $response['competitions'] = $competitions;
+            // 1. D'abord, récupérer toutes les données de l'event
+            $hippodataUrl = "https://api.hippo-server.net/scoring/event/{$showId}";
+            
+            $ch = curl_init($hippodataUrl);
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_HTTPHEADER, [
+                "Authorization: Bearer " . ($_ENV['HIPPODATA_BEARER'] ?? ''),
+                "Accept: application/json"
+            ]);
+            
+            $response = curl_exec($ch);
+            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            curl_close($ch);
+            
+            if ($httpCode !== 200) {
+                throw new Exception("Failed to fetch event data (HTTP {$httpCode})");
             }
             
-            // Si on a le batchData, l'inclure même en cas d'erreur
-            if (isset($batchData)) {
-                $response['jsonSent'] = $batchData;
+            $hippodataData = json_decode($response, true);
+            $hippodataClasses = [];
+            foreach ($hippodataData['CLASSES']['CLASS'] ?? [] as $class) {
+                $hippodataClasses[$class['ID']] = $class;
             }
             
-            echo json_encode($response);
+            // 2. Traiter chaque sélection
+            $classesToImport = [];
+            $startlistsToProcess = [];
+            $resultsToProcess = [];
+            $counter = 1;
+            
+            foreach ($selections as $selection) {
+                $classId = $selection['class_id'];
+                $classData = $hippodataClasses[$classId] ?? null;
+                
+                if (!$classData) continue;
+                
+                // Si import class est sélectionné
+                if ($selection['import_class']) {
+                    $name = !empty($classData['NAME']) ? $classData['NAME'] : $classData['SPONSOR'];
+                    
+                    $classToImport = [
+                        'foreign_id' => (string)$classData['ID'],
+                        'clabb' => 'HD-' . $counter,
+                        'klass' => $name,
+                        'oeverskr1' => $name,
+                        'datum' => $classData['DATE'],
+                        'tavlingspl' => $classData['CATEGORY'] ?? '',
+                        'z' => 'H',
+                        'x' => 'I',
+                        'premie_curr' => $classData['PRIZE']['CURRENCY'] ?? 'EUR',
+                        'prsum1' => $classData['PRIZE']['MONEY'] ?? 0
+                    ];
+                    
+                    // Ajouter l'article FEI si spécifié
+                    if (!empty($selection['fei_article'])) {
+                        $classToImport['fei_article'] = $selection['fei_article'];
+                    }
+                    
+                    // Ajouter le flag team_class si coché
+                    if ($selection['team_class']) {
+                        $classToImport['team_class'] = true;
+                    }
+                    
+                    $classesToImport[] = $classToImport;
+                    $counter++;
+                    
+                    $results['classes'][] = [
+                        'foreign_id' => $classData['ID'],
+                        'class_id' => $classData['NR'] ?? $classData['ID'],
+                        'name' => $name,
+                        'status' => 'pending'
+                    ];
+                }
+                
+                // Stocker les infos pour les imports de startlists et résultats
+                if ($selection['import_startlist']) {
+                    $startlistsToProcess[] = [
+                        'foreign_id' => $classData['ID'],
+                        'class_id' => $classData['NR'] ?? $classData['ID'],
+                        'name' => !empty($classData['NAME']) ? $classData['NAME'] : $classData['SPONSOR']
+                    ];
+                }
+                
+                if ($selection['import_results']) {
+                    $resultsToProcess[] = [
+                        'foreign_id' => $classData['ID'],
+                        'class_id' => $classData['NR'] ?? $classData['ID'],
+                        'name' => !empty($classData['NAME']) ? $classData['NAME'] : $classData['SPONSOR']
+                    ];
+                }
+            }
+            
+            // 3. Importer les classes si nécessaire
+            if (!empty($classesToImport)) {
+                $batchData = [
+                    'competitions' => [
+                        'unique_by' => 'foreign_id',
+                        'skip_user_changed' => true,
+                        'records' => $classesToImport
+                    ]
+                ];
+                
+                $transactionUuid = sprintf('%04x%04x-%04x-%04x-%04x-%04x%04x%04x',
+                    mt_rand(0, 0xffff), mt_rand(0, 0xffff),
+                    mt_rand(0, 0xffff),
+                    mt_rand(0, 0x0fff) | 0x4000,
+                    mt_rand(0, 0x3fff) | 0x8000,
+                    mt_rand(0, 0xffff), mt_rand(0, 0xffff), mt_rand(0, 0xffff)
+                );
+                
+                $batchUrl = $meetingUrl . '/batch';
+                
+                $ch = curl_init($batchUrl);
+                curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+                curl_setopt($ch, CURLOPT_POST, true);
+                curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($batchData));
+                curl_setopt($ch, CURLOPT_HTTPHEADER, [
+                    "X-Api-Key: {$apiKey}",
+                    "X-Transaction-Uuid: {$transactionUuid}",
+                    "Accept: application/json",
+                    "Content-Type: application/json"
+                ]);
+                
+                $equipeResponse = curl_exec($ch);
+                $equipeHttpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+                curl_close($ch);
+                
+                // Mettre à jour les statuts
+                foreach ($results['classes'] as &$class) {
+                    $class['status'] = ($equipeHttpCode === 200 || $equipeHttpCode === 201) ? 'success' : 'failed';
+                }
+            }
+            
+            // Retourner les résultats avec les listes à traiter
+            echo json_encode([
+                'success' => true,
+                'results' => $results,
+                'event_id' => $hippodataData['EVENT']['ID'] ?? $showId,
+                'startlists_to_process' => $startlistsToProcess,
+                'results_to_process' => $resultsToProcess
+            ]);
+            
+        } catch (Exception $e) {
+            echo json_encode(['success' => false, 'error' => $e->getMessage()]);
         }
         exit;
     }
@@ -264,7 +337,325 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         exit;
     }
     
-    // Nouvelle action pour importer les résultats
+    // Action pour importer les startlists
+    if ($_POST['action'] === 'import_startlists') {
+        if ($debugMode) {
+            error_log("Import startlists action triggered");
+        }
+        
+        $eventId = $_POST['event_id'] ?? '';
+        $apiKey = $_POST['api_key'] ?? '';
+        $meetingUrl = $_POST['meeting_url'] ?? '';
+        $competitions = json_decode($_POST['competitions'] ?? '[]', true);
+        
+        if ($debugMode) {
+            error_log("Event ID: " . $eventId);
+            error_log("Meeting URL: " . $meetingUrl);
+            error_log("Competitions count: " . count($competitions));
+        }
+        
+        if (empty($eventId) || empty($competitions)) {
+            echo json_encode(['success' => false, 'error' => 'Event ID and competitions are required']);
+            exit;
+        }
+        
+        try {
+            // 1. Récupérer la liste des personnes existantes dans Equipe
+            $existingPeople = [];
+            $existingPeopleFeiIds = [];
+            
+            $ch = curl_init($meetingUrl . '/people.json');
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_HTTPHEADER, ["X-Api-Key: {$apiKey}", "Accept: application/json"]);
+            curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+            $response = curl_exec($ch);
+            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            curl_close($ch);
+            
+            // Si people.json existe et retourne 200
+            if ($httpCode === 200 && $response) {
+                $people = json_decode($response, true);
+                if (is_array($people)) {
+                    foreach ($people as $person) {
+                        // Stocker par foreign_id et par fei_id
+                        if (isset($person['foreign_id'])) {
+                            $existingPeople[$person['foreign_id']] = $person;
+                        }
+                        if (isset($person['fei_id'])) {
+                            $existingPeopleFeiIds[$person['fei_id']] = $person;
+                        }
+                    }
+                }
+            }
+            if ($debugMode) {
+                error_log("Found " . count($existingPeople) . " existing people");
+            }
+            
+            // 2. Récupérer la liste des chevaux existants dans Equipe
+            $existingHorses = [];
+            $existingHorsesFeiIds = [];
+            
+            $ch = curl_init($meetingUrl . '/horses.json');
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_HTTPHEADER, ["X-Api-Key: {$apiKey}", "Accept: application/json"]);
+            curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+            $response = curl_exec($ch);
+            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            curl_close($ch);
+            
+            // Si horses.json existe et retourne 200
+            if ($httpCode === 200 && $response) {
+                $horses = json_decode($response, true);
+                if (is_array($horses)) {
+                    foreach ($horses as $horse) {
+                        // Stocker par foreign_id et par fei_id
+                        if (isset($horse['foreign_id'])) {
+                            $existingHorses[$horse['foreign_id']] = $horse;
+                        }
+                        if (isset($horse['fei_id'])) {
+                            $existingHorsesFeiIds[$horse['fei_id']] = $horse;
+                        }
+                    }
+                }
+            }
+            if ($debugMode) {
+                error_log("Found " . count($existingHorses) . " existing horses");
+            }
+            
+            $allBatchData = [];
+            $processedCompetitions = [];
+            
+            // 3. Pour chaque compétition, récupérer la startlist
+            foreach ($competitions as $comp) {
+                $classId = $comp['class_id'];
+                $competitionForeignId = $comp['foreign_id'];
+                
+                if ($debugMode) {
+                    error_log("Processing competition: " . $comp['name'] . " (class_id: " . $classId . ")");
+                }
+                
+                // Récupérer la startlist depuis Hippodata
+                $url = "https://api.hippo-server.net/scoring/event/{$eventId}/startlist/{$classId}/all";
+                
+                $ch = curl_init($url);
+                curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+                curl_setopt($ch, CURLOPT_HTTPHEADER, [
+                    "Authorization: Bearer " . ($_ENV['HIPPODATA_BEARER'] ?? ''),
+                    "Accept: application/json"
+                ]);
+                curl_setopt($ch, CURLOPT_TIMEOUT, 15);
+                
+                $response = curl_exec($ch);
+                $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+                $curlError = curl_error($ch);
+                curl_close($ch);
+                
+                if ($httpCode !== 200) {
+                    if ($debugMode) {
+                        error_log("Failed to fetch startlist for class $classId (HTTP $httpCode)");
+                    }
+                    $processedCompetitions[] = [
+                        'name' => $comp['name'],
+                        'foreign_id' => $competitionForeignId,
+                        'people_count' => 0,
+                        'horses_count' => 0,
+                        'starts_count' => 0,
+                        'error' => "Failed to fetch startlist (HTTP $httpCode)"
+                    ];
+                    continue;
+                }
+                
+                $startlistData = json_decode($response, true);
+                
+                if (!isset($startlistData['CLASS']['COMPETITORS']['COMPETITOR'])) {
+                    if ($debugMode) {
+                        error_log("No competitors found for class $classId");
+                    }
+                    $processedCompetitions[] = [
+                        'name' => $comp['name'],
+                        'foreign_id' => $competitionForeignId,
+                        'people_count' => 0,
+                        'horses_count' => 0,
+                        'starts_count' => 0,
+                        'error' => "No competitors in startlist"
+                    ];
+                    continue;
+                }
+                
+                $newPeople = [];
+                $newHorses = [];
+                $starts = [];
+                
+                // Traiter chaque concurrent
+                $competitors = $startlistData['CLASS']['COMPETITORS']['COMPETITOR'];
+                
+                // S'assurer que c'est un tableau d'arrays
+                if (isset($competitors['RIDER'])) {
+                    // Un seul concurrent, le mettre dans un tableau
+                    $competitors = [$competitors];
+                }
+                
+                foreach ($competitors as $competitor) {
+                    $rider = $competitor['RIDER'] ?? [];
+                    $horse = $competitor['HORSE'] ?? [];
+                    
+                    // Vérifier et préparer les données du cavalier
+                    $riderFeiId = $rider['RFEI_ID'] ?? null;
+                    if ($riderFeiId && !isset($existingPeople[$riderFeiId]) && !isset($existingPeopleFeiIds[$riderFeiId])) {
+                        // Parser le nom
+                        $nameParts = explode(',', $rider['RNAME'] ?? '');
+                        $lastName = trim($nameParts[0] ?? '');
+                        $firstName = trim($nameParts[1] ?? '');
+                        
+                        $newPeople[] = [
+                            'foreign_id' => $riderFeiId,
+                            'first_name' => $firstName,
+                            'last_name' => $lastName,
+                            'country' => $rider['NATION'] ?? '',
+                            'fei_id' => $riderFeiId
+                        ];
+                        
+                        // Marquer comme existant pour éviter les doublons dans ce batch
+                        $existingPeople[$riderFeiId] = true;
+                        $existingPeopleFeiIds[$riderFeiId] = true;
+                    }
+                    
+                    // Vérifier et préparer les données du cheval
+                    $horseFeiId = $horse['HFEI_ID'] ?? null;
+                    if ($horseFeiId && !isset($existingHorses[$horseFeiId]) && !isset($existingHorsesFeiIds[$horseFeiId])) {
+                        $horseInfo = $horse['HORSEINFO'] ?? [];
+                        
+                        // Mapper le sexe
+                        $gender = strtolower($horseInfo['GENDER'] ?? '');
+                        $sexMap = [
+                            'm' => 'val', // Male/Stallion
+                            'g' => 'val', // Gelding
+                            'f' => 'sto', // Female/Mare
+                            'mare' => 'sto',
+                            'stallion' => 'hin',
+                            'gelding' => 'val'
+                        ];
+                        $sex = $sexMap[$gender] ?? 'val';
+                        
+                        $newHorses[] = [
+                            'foreign_id' => $horseFeiId,
+                            'num' => $horse['HNR'] ?? '',
+                            'name' => $horse['HNAME'] ?? '',
+                            'sex' => $sex,
+                            'born_year' => (string)($horseInfo['BORNYEAR'] ?? ''),
+                            'owner' => $horseInfo['OWNER'] ?? '',
+                            'category' => 'H',
+                            'fei_id' => $horseFeiId
+                        ];
+                        
+                        // Marquer comme existant pour éviter les doublons dans ce batch
+                        $existingHorses[$horseFeiId] = true;
+                        $existingHorsesFeiIds[$horseFeiId] = true;
+                    }
+                    
+                    // Préparer la start entry
+                    if ($riderFeiId && $horseFeiId) {
+                        $sortOrder = $competitor['SORTROUND']['ROUND1'] ?? $competitor['SORTORDER'] ?? 0;
+                        $starts[] = [
+                            'foreign_id' => $riderFeiId . '_' . $horseFeiId . '_' . $competitionForeignId,
+                            'st' => (string)$sortOrder,
+                            'ord' => (int)$sortOrder,
+                            'rider' => [
+                                'foreign_id' => $riderFeiId
+                            ],
+                            'horse' => [
+                                'foreign_id' => $horseFeiId
+                            ]
+                        ];
+                    }
+                }
+                
+                if ($debugMode) {
+                    error_log("Competition " . $comp['name'] . ": " . count($newPeople) . " new people, " . count($newHorses) . " new horses, " . count($starts) . " starts");
+                }
+                
+                // Préparer le batch data pour cette compétition
+                $batchData = [];
+                
+                if (!empty($newPeople)) {
+                    $batchData['people'] = [
+                        'unique_by' => 'foreign_id',
+                        'records' => $newPeople
+                    ];
+                }
+                
+                if (!empty($newHorses)) {
+                    $batchData['horses'] = [
+                        'unique_by' => 'foreign_id',
+                        'records' => $newHorses
+                    ];
+                }
+                
+                if (!empty($starts)) {
+                    $batchData['starts'] = [
+                        'unique_by' => 'foreign_id',
+                        'where' => [
+                            'competition' => [
+                                'foreign_id' => $competitionForeignId
+                            ]
+                        ],
+                        'abort_if_any' => [
+                            'rid' => true
+                        ],
+                        'replace' => true,
+                        'records' => $starts
+                    ];
+                }
+                
+                if (!empty($batchData)) {
+                    $allBatchData[] = [
+                        'competition' => $comp['name'],
+                        'competition_foreign_id' => $competitionForeignId,
+                        'data' => $batchData,
+                        'details' => [
+                            'people' => $newPeople,
+                            'horses' => $newHorses,
+                            'starts' => $starts
+                        ]
+                    ];
+                }
+                
+                $processedCompetitions[] = [
+                    'name' => $comp['name'],
+                    'foreign_id' => $competitionForeignId,
+                    'people_count' => count($newPeople),
+                    'horses_count' => count($newHorses),
+                    'starts_count' => count($starts),
+                    'people' => array_map(function($p) {
+                        return $p['first_name'] . ' ' . $p['last_name'] . ' (' . $p['country'] . ')';
+                    }, $newPeople),
+                    'horses' => array_map(function($h) {
+                        return $h['name'] . ' - ' . $h['fei_id'];
+                    }, $newHorses)
+                ];
+            }
+            
+            if ($debugMode) {
+                error_log("Total processed: " . count($processedCompetitions) . " competitions");
+            }
+            
+            echo json_encode([
+                'success' => true,
+                'message' => 'Startlists ready for import',
+                'processedCompetitions' => $processedCompetitions,
+                'batchData' => $allBatchData
+            ]);
+            
+        } catch (Exception $e) {
+            if ($debugMode) {
+                error_log("Exception in import_startlists: " . $e->getMessage());
+            }
+            echo json_encode(['success' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+    
+    // Action pour importer les résultats
     if ($_POST['action'] === 'import_results') {
         if ($debugMode) {
             error_log("Import results action triggered");
@@ -607,324 +998,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         }
         exit;
     }
-    
-    // Nouvelle action pour importer les startlists
-    if ($_POST['action'] === 'import_startlists') {
-        if ($debugMode) {
-            error_log("Import startlists action triggered");
-        }
-        
-        $eventId = $_POST['event_id'] ?? '';
-        $apiKey = $_POST['api_key'] ?? '';
-        $meetingUrl = $_POST['meeting_url'] ?? '';
-        $competitions = json_decode($_POST['competitions'] ?? '[]', true);
-        
-        if ($debugMode) {
-            error_log("Event ID: " . $eventId);
-            error_log("Meeting URL: " . $meetingUrl);
-            error_log("Competitions count: " . count($competitions));
-        }
-        
-        if (empty($eventId) || empty($competitions)) {
-            echo json_encode(['success' => false, 'error' => 'Event ID and competitions are required']);
-            exit;
-        }
-        
-        try {
-            // 1. Récupérer la liste des personnes existantes dans Equipe
-            $existingPeople = [];
-            $existingPeopleFeiIds = [];
-            
-            $ch = curl_init($meetingUrl . '/people.json');
-            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-            curl_setopt($ch, CURLOPT_HTTPHEADER, ["X-Api-Key: {$apiKey}", "Accept: application/json"]);
-            curl_setopt($ch, CURLOPT_TIMEOUT, 10);
-            $response = curl_exec($ch);
-            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-            curl_close($ch);
-            
-            // Si people.json existe et retourne 200
-            if ($httpCode === 200 && $response) {
-                $people = json_decode($response, true);
-                if (is_array($people)) {
-                    foreach ($people as $person) {
-                        // Stocker par foreign_id et par fei_id
-                        if (isset($person['foreign_id'])) {
-                            $existingPeople[$person['foreign_id']] = $person;
-                        }
-                        if (isset($person['fei_id'])) {
-                            $existingPeopleFeiIds[$person['fei_id']] = $person;
-                        }
-                    }
-                }
-            }
-            if ($debugMode) {
-                error_log("Found " . count($existingPeople) . " existing people");
-            }
-            
-            // 2. Récupérer la liste des chevaux existants dans Equipe
-            $existingHorses = [];
-            $existingHorsesFeiIds = [];
-            
-            $ch = curl_init($meetingUrl . '/horses.json');
-            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-            curl_setopt($ch, CURLOPT_HTTPHEADER, ["X-Api-Key: {$apiKey}", "Accept: application/json"]);
-            curl_setopt($ch, CURLOPT_TIMEOUT, 10);
-            $response = curl_exec($ch);
-            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-            curl_close($ch);
-            
-            // Si horses.json existe et retourne 200
-            if ($httpCode === 200 && $response) {
-                $horses = json_decode($response, true);
-                if (is_array($horses)) {
-                    foreach ($horses as $horse) {
-                        // Stocker par foreign_id et par fei_id
-                        if (isset($horse['foreign_id'])) {
-                            $existingHorses[$horse['foreign_id']] = $horse;
-                        }
-                        if (isset($horse['fei_id'])) {
-                            $existingHorsesFeiIds[$horse['fei_id']] = $horse;
-                        }
-                    }
-                }
-            }
-            if ($debugMode) {
-                error_log("Found " . count($existingHorses) . " existing horses");
-            }
-            
-            $allBatchData = [];
-            $processedCompetitions = [];
-            
-            // 3. Pour chaque compétition, récupérer la startlist
-            foreach ($competitions as $comp) {
-                $classId = $comp['class_id'];
-                $competitionForeignId = $comp['foreign_id'];
-                
-                if ($debugMode) {
-                    error_log("Processing competition: " . $comp['name'] . " (class_id: " . $classId . ")");
-                }
-                
-                // Récupérer la startlist depuis Hippodata
-                $url = "https://api.hippo-server.net/scoring/event/{$eventId}/startlist/{$classId}/all";
-                
-                $ch = curl_init($url);
-                curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-                curl_setopt($ch, CURLOPT_HTTPHEADER, [
-                    "Authorization: Bearer " . ($_ENV['HIPPODATA_BEARER'] ?? ''),
-                    "Accept: application/json"
-                ]);
-                curl_setopt($ch, CURLOPT_TIMEOUT, 15);
-                
-                $response = curl_exec($ch);
-                $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-                $curlError = curl_error($ch);
-                curl_close($ch);
-                
-                if ($httpCode !== 200) {
-                    if ($debugMode) {
-                        error_log("Failed to fetch startlist for class $classId (HTTP $httpCode)");
-                    }
-                    $processedCompetitions[] = [
-                        'name' => $comp['name'],
-                        'foreign_id' => $competitionForeignId,
-                        'people_count' => 0,
-                        'horses_count' => 0,
-                        'starts_count' => 0,
-                        'error' => "Failed to fetch startlist (HTTP $httpCode)"
-                    ];
-                    continue;
-                }
-                
-                $startlistData = json_decode($response, true);
-                
-                if (!isset($startlistData['CLASS']['COMPETITORS']['COMPETITOR'])) {
-                    if ($debugMode) {
-                        error_log("No competitors found for class $classId");
-                    }
-                    $processedCompetitions[] = [
-                        'name' => $comp['name'],
-                        'foreign_id' => $competitionForeignId,
-                        'people_count' => 0,
-                        'horses_count' => 0,
-                        'starts_count' => 0,
-                        'error' => "No competitors in startlist"
-                    ];
-                    continue;
-                }
-                
-                $newPeople = [];
-                $newHorses = [];
-                $starts = [];
-                
-                // Traiter chaque concurrent
-                $competitors = $startlistData['CLASS']['COMPETITORS']['COMPETITOR'];
-                
-                // S'assurer que c'est un tableau d'arrays
-                if (isset($competitors['RIDER'])) {
-                    // Un seul concurrent, le mettre dans un tableau
-                    $competitors = [$competitors];
-                }
-                
-                foreach ($competitors as $competitor) {
-                    $rider = $competitor['RIDER'] ?? [];
-                    $horse = $competitor['HORSE'] ?? [];
-                    
-                    // Vérifier et préparer les données du cavalier
-                    $riderFeiId = $rider['RFEI_ID'] ?? null;
-                    if ($riderFeiId && !isset($existingPeople[$riderFeiId]) && !isset($existingPeopleFeiIds[$riderFeiId])) {
-                        // Parser le nom
-                        $nameParts = explode(',', $rider['RNAME'] ?? '');
-                        $lastName = trim($nameParts[0] ?? '');
-                        $firstName = trim($nameParts[1] ?? '');
-                        
-                        $newPeople[] = [
-                            'foreign_id' => $riderFeiId,
-                            'first_name' => $firstName,
-                            'last_name' => $lastName,
-                            'country' => $rider['NATION'] ?? '',
-                            'fei_id' => $riderFeiId
-                        ];
-                        
-                        // Marquer comme existant pour éviter les doublons dans ce batch
-                        $existingPeople[$riderFeiId] = true;
-                        $existingPeopleFeiIds[$riderFeiId] = true;
-                    }
-                    
-                    // Vérifier et préparer les données du cheval
-                    $horseFeiId = $horse['HFEI_ID'] ?? null;
-                    if ($horseFeiId && !isset($existingHorses[$horseFeiId]) && !isset($existingHorsesFeiIds[$horseFeiId])) {
-                        $horseInfo = $horse['HORSEINFO'] ?? [];
-                        
-                        // Mapper le sexe
-                        $gender = strtolower($horseInfo['GENDER'] ?? '');
-                        $sexMap = [
-                            'm' => 'val', // Male/Stallion
-                            'g' => 'val', // Gelding
-                            'f' => 'sto', // Female/Mare
-                            'mare' => 'sto',
-                            'stallion' => 'hin',
-                            'gelding' => 'val'
-                        ];
-                        $sex = $sexMap[$gender] ?? 'val';
-                        
-                        $newHorses[] = [
-                            'foreign_id' => $horseFeiId,
-                            'num' => $horse['HNR'] ?? '',
-                            'name' => $horse['HNAME'] ?? '',
-                            'sex' => $sex,
-                            'born_year' => (string)($horseInfo['BORNYEAR'] ?? ''),
-                            'owner' => $horseInfo['OWNER'] ?? '',
-                            'category' => 'H',
-                            'fei_id' => $horseFeiId
-                        ];
-                        
-                        // Marquer comme existant pour éviter les doublons dans ce batch
-                        $existingHorses[$horseFeiId] = true;
-                        $existingHorsesFeiIds[$horseFeiId] = true;
-                    }
-                    
-                    // Préparer la start entry
-                    if ($riderFeiId && $horseFeiId) {
-                        $sortOrder = $competitor['SORTROUND']['ROUND1'] ?? $competitor['SORTORDER'] ?? 0;
-                        $starts[] = [
-                            'foreign_id' => $riderFeiId . '_' . $horseFeiId . '_' . $competitionForeignId,
-                            'st' => (string)$sortOrder,
-                            'ord' => (int)$sortOrder,
-                            'rider' => [
-                                'foreign_id' => $riderFeiId
-                            ],
-                            'horse' => [
-                                'foreign_id' => $horseFeiId
-                            ]
-                        ];
-                    }
-                }
-                
-                if ($debugMode) {
-                    error_log("Competition " . $comp['name'] . ": " . count($newPeople) . " new people, " . count($newHorses) . " new horses, " . count($starts) . " starts");
-                }
-                
-                // Préparer le batch data pour cette compétition
-                $batchData = [];
-                
-                if (!empty($newPeople)) {
-                    $batchData['people'] = [
-                        'unique_by' => 'foreign_id',
-                        'records' => $newPeople
-                    ];
-                }
-                
-                if (!empty($newHorses)) {
-                    $batchData['horses'] = [
-                        'unique_by' => 'foreign_id',
-                        'records' => $newHorses
-                    ];
-                }
-                
-                if (!empty($starts)) {
-                    $batchData['starts'] = [
-                        'unique_by' => 'foreign_id',
-                        'where' => [
-                            'competition' => [
-                                'foreign_id' => $competitionForeignId
-                            ]
-                        ],
-                        'abort_if_any' => [
-                            'rid' => true
-                        ],
-                        'replace' => true,
-                        'records' => $starts
-                    ];
-                }
-                
-                if (!empty($batchData)) {
-                    $allBatchData[] = [
-                        'competition' => $comp['name'],
-                        'competition_foreign_id' => $competitionForeignId,
-                        'data' => $batchData,
-                        'details' => [
-                            'people' => $newPeople,
-                            'horses' => $newHorses,
-                            'starts' => $starts
-                        ]
-                    ];
-                }
-                
-                $processedCompetitions[] = [
-                    'name' => $comp['name'],
-                    'foreign_id' => $competitionForeignId,
-                    'people_count' => count($newPeople),
-                    'horses_count' => count($newHorses),
-                    'starts_count' => count($starts),
-                    'people' => array_map(function($p) {
-                        return $p['first_name'] . ' ' . $p['last_name'] . ' (' . $p['country'] . ')';
-                    }, $newPeople),
-                    'horses' => array_map(function($h) {
-                        return $h['name'] . ' - ' . $h['fei_id'];
-                    }, $newHorses)
-                ];
-            }
-            
-            if ($debugMode) {
-                error_log("Total processed: " . count($processedCompetitions) . " competitions");
-            }
-            
-            echo json_encode([
-                'success' => true,
-                'message' => 'Startlists ready for import',
-                'processedCompetitions' => $processedCompetitions,
-                'batchData' => $allBatchData
-            ]);
-            
-        } catch (Exception $e) {
-            if ($debugMode) {
-                error_log("Exception in import_startlists: " . $e->getMessage());
-            }
-            echo json_encode(['success' => false, 'error' => $e->getMessage()]);
-        }
-        exit;
-    }   
 }
 
 // Affichage pour le mode modal/browser
@@ -937,87 +1010,106 @@ if ($decoded && isset($decoded->payload->target)) {
     <meta charset="UTF-8">
     <title>Extension Equipe - Hippodata</title>
     <link rel="stylesheet" href="<?php echo htmlspecialchars($decoded->payload->style_url ?? ''); ?>">
-    <link rel="stylesheet" href="css/custom.css">
+    <link rel="stylesheet" href="css/custom.css?version=<?php echo rand();?>">
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
 
 </head>
 <body class="extension">
     <div class="import-container">
-        <h3>Import Classes from Hippodata</h3>
+        <h3>Import from Hippodata</h3>
         
         <div id="alertMessage" style="display: none;"></div>
         
-        <form id="importForm">
-            <div class="form-group">
-                <label for="feiId">FEI ID:</label>
-                <input type="text" id="feiId" name="fei_id" class="form-control" placeholder="Enter FEI Event ID" required>
-            </div>
-            
-            <div class="form-group">
-                <label>Import options:</label>
-                <div style="margin-left: 20px;">
-                    <div style="margin-bottom: 10px;">
-                        <label style="font-weight: normal;">
-                            <input type="checkbox" id="importClasses" name="import_classes" checked>
-                            Import classes (competitions)
-                        </label>
-                    </div>
-                    <div style="margin-bottom: 10px;">
-                        <label style="font-weight: normal;">
-                            <input type="checkbox" id="importStartlists" name="import_startlists">
-                            Import startlists (riders & horses)
-                        </label>
-                    </div>
-                    <div style="margin-bottom: 10px;">
-                        <label style="font-weight: normal;">
-                            <input type="checkbox" id="importResults" name="import_results">
-                            Import results
-                        </label>
-                    </div>
+        <!-- Étape 1: Recherche de l'event -->
+        <div id="searchStep">
+            <form id="searchForm">
+                <div class="form-group">
+                    <label for="showId">Show ID (FEI Event ID):</label>
+                    <input type="text" id="showId" name="show_id" class="form-control" placeholder="Enter FEI Event ID" required>
                 </div>
+                
+                <button type="submit" class="btn btn-primary" id="searchButton">
+                    Search Event
+                </button>
+            </form>
+        </div>
+        
+        <!-- Étape 2: Sélection des classes -->
+        <div id="selectionStep" style="display: none;">
+            <div id="eventInfo"></div>
+            
+            <table class="classes-table" id="classesTable">
+                <thead>
+                    <tr>
+                        <th>Class</th>
+                        <th>Date</th>
+                        <th>Class Import</th>
+                        <th>Startlist Import</th>
+                        <th>Result Import</th>
+                        <th>Team Class</th>
+                        <th>FEI Article</th>
+                    </tr>
+                    <tr class="select-all-row">
+                        <td colspan="2">Select All →</td>
+                        <td><input type="checkbox" id="selectAllClasses"></td>
+                        <td><input type="checkbox" id="selectAllStartlists"></td>
+                        <td><input type="checkbox" id="selectAllResults"></td>
+                        <td><input type="checkbox" id="selectAllTeam"></td>
+                        <td>
+                            <select id="selectAllArticle">
+                                <option value="">-- Select --</option>
+                                <option value="238.2.1">238.2.1 - Comp. not against the clock</option>
+                                <option value="238.2.2">238.2.2 - Comp. against the clock</option>
+                                <option value="238.1.1">238.1.1 - Comp. with jump-off</option>
+                                <option value="239">239 - Comp. with winning round</option>
+                                <option value="263">263 - Relay competitions</option>
+                                <option value="264">264 - Fault and Out competition</option>
+                                <option value="265">265 - Hit and Hurry competition</option>
+                                <option value="266">266 - Accumulator competition</option>
+                                <option value="267">267 - Top Score competition</option>
+                                <option value="268">268 - Take Your Own Line</option>
+                                <option value="269">269 - Knock-Out competition</option>
+                                <option value="270">270 - Two or Several Phases</option>
+                                <option value="271">271 - Competition in Groups</option>
+                                <option value="272">272 - Competition with a Joker</option>
+                                <option value="273">273 - Derby</option>
+                                <option value="274">274 - Competition over Combinations</option>
+                            </select>
+                        </td>
+                    </tr>
+                </thead>
+                <tbody id="classesTableBody">
+                    <!-- Classes will be populated here -->
+                </tbody>
+            </table>
+            
+            <div class="action-buttons">
+                <button type="button" class="btn btn-secondary" id="backButton">Back</button>
+                <button type="button" class="btn btn-primary" id="importSelectedButton">Import Selected</button>
             </div>
-            
-            <button type="submit" class="btn btn-primary" id="importButton">
-                Start Import Process
-            </button>
-        </form>
-        
-        <div id="results" class="result-list" style="display: none;">
-            <h4>Imported Competitions:</h4>
-            <ul id="competitionList"></ul>
-            
-            <button type="button" class="btn btn-primary" id="importStartlistsButton" style="display: none; margin-top: 20px;">
-                Import Startlists for All Competitions
-            </button>
         </div>
         
-        <div id="startlistResults" class="result-list" style="display: none; margin-top: 20px;">
-            <h4>Startlist Import Results:</h4>
-            <ul id="startlistResultList"></ul>
+        <!-- Étape 3: Résultats -->
+        <div id="resultsStep" style="display: none;">
+            <h4>Import Progress</h4>
+            <div id="importProgress"></div>
             
-            <?php if ($debugMode): ?>
-            <div id="detailedResults" style="display: none; margin-top: 20px;">
-                <h5>Detailed Import Information:</h5>
-                <div id="detailedContent"></div>
+            <div class="action-buttons">
+                <button type="button" class="btn btn-primary" id="newImportButton">New Import</button>
             </div>
-            <?php endif; ?>
         </div>
-        
-        <!-- Debug area -->
-        <?php if ($debugMode): ?>
-        <div id="debugArea" style="margin-top: 20px; padding: 10px; background: #f0f0f0;">
-            <h5>Debug Info:</h5>
-            <pre id="debugContent"></pre>
-        </div>
-        <?php endif; ?>
     </div>
     
     <script>
-        let savedEventId = null;
-        let savedCompetitions = [];
         const debugMode = <?php echo $debugMode ? 'true' : 'false'; ?>;
+        let currentEventData = null;
+        let currentSelections = [];
+        let importOptions = {
+            classes: false,
+            startlists: false,
+            results: false
+        };
         
-        // Fonction pour log conditionnel
         function debugLog(...args) {
             if (debugMode) {
                 console.log(...args);
@@ -1025,382 +1117,489 @@ if ($decoded && isset($decoded->payload->target)) {
         }
         
         $(document).ready(function() {
-            // Variables globales pour stocker les options sélectionnées
-            let importOptions = {
-                classes: false,
-                startlists: false,
-                results: false
-            };
-            
-            $('#importForm').on('submit', function(e) {
+            // Recherche de l'event
+            $('#searchForm').on('submit', function(e) {
                 e.preventDefault();
                 
-                // Récupérer les options cochées
-                importOptions.classes = $('#importClasses').is(':checked');
-                importOptions.startlists = $('#importStartlists').is(':checked');
-                importOptions.results = $('#importResults').is(':checked');
+                const showId = $('#showId').val();
+                const button = $('#searchButton');
+                const alertDiv = $('#alertMessage');
                 
-                // Vérifier qu'au moins une option est cochée
-                if (!importOptions.classes && !importOptions.startlists && !importOptions.results) {
-                    const alertDiv = $('#alertMessage');
-                    alertDiv.removeClass('alert-success alert-info').addClass('alert alert-danger');
-                    alertDiv.text('Please select at least one import option.').show();
+                alertDiv.hide();
+                button.prop('disabled', true).text('Searching...');
+                
+                $.ajax({
+                    url: window.location.href,
+                    type: 'POST',
+                    data: {
+                        action: 'fetch_event_info',
+                        show_id: showId
+                    },
+                    dataType: 'json',
+                    success: function(response) {
+                        if (response.success) {
+                            currentEventData = response;
+                            displayEventInfo(response);
+                            $('#searchStep').hide();
+                            $('#selectionStep').show();
+                        } else {
+                            alertDiv.removeClass('alert-success').addClass('alert alert-danger');
+                            alertDiv.text('Error: ' + response.error).show();
+                        }
+                    },
+                    error: function(xhr, status, error) {
+                        alertDiv.removeClass('alert-success').addClass('alert alert-danger');
+                        alertDiv.text('Request failed: ' + error).show();
+                    },
+                    complete: function() {
+                        button.prop('disabled', false).text('Search Event');
+                    }
+                });
+            });
+            
+            // Afficher les infos de l'event
+            function displayEventInfo(data) {
+                $('#eventInfo').html(
+                    '<h4>' + data.event.name + '</h4>' +
+                    '<p><strong>Event ID:</strong> ' + data.event.id + '</p>' +
+                    '<p><strong>Venue:</strong> ' + data.event.venue + '</p>'
+                );
+                
+                // Remplir le tableau des classes
+                const tbody = $('#classesTableBody');
+                tbody.empty();
+                
+                data.classes.forEach(function(cls, index) {
+                    const row = $('<tr>');
+                    row.append('<td>' + cls.name + '</td>');
+                    row.append('<td>' + cls.date + '</td>');
+                    row.append('<td><input type="checkbox" class="class-import" data-class-id="' + cls.id + '" data-index="' + index + '"></td>');
+                    row.append('<td><input type="checkbox" class="startlist-import" data-class-id="' + cls.id + '" data-index="' + index + '"></td>');
+                    row.append('<td><input type="checkbox" class="result-import" data-class-id="' + cls.id + '" data-index="' + index + '"></td>');
+                    row.append('<td><input type="checkbox" class="team-class" data-class-id="' + cls.id + '" data-index="' + index + '"></td>');
+                    row.append('<td><select class="fei-article" data-class-id="' + cls.id + '" data-index="' + index + '">' + $('#selectAllArticle').html() + '</select></td>');
+                    
+                    tbody.append(row);
+                });
+            }
+            
+            // Gestion des "Select All"
+            $('#selectAllClasses').on('change', function() {
+                $('.class-import').prop('checked', $(this).is(':checked'));
+            });
+            
+            $('#selectAllStartlists').on('change', function() {
+                $('.startlist-import').prop('checked', $(this).is(':checked'));
+            });
+            
+            $('#selectAllResults').on('change', function() {
+                $('.result-import').prop('checked', $(this).is(':checked'));
+            });
+            
+            $('#selectAllTeam').on('change', function() {
+                $('.team-class').prop('checked', $(this).is(':checked'));
+            });
+            
+            $('#selectAllArticle').on('change', function() {
+                $('.fei-article').val($(this).val());
+            });
+            
+            // Bouton retour
+            $('#backButton').on('click', function() {
+                $('#selectionStep').hide();
+                $('#searchStep').show();
+            });
+            
+            // Import des sélections
+            $('#importSelectedButton').on('click', function() {
+                const selections = [];
+                
+                $('#classesTableBody tr').each(function(index) {
+                    const row = $(this);
+                    const classId = row.find('.class-import').data('class-id');
+                    const classData = currentEventData.classes[index];
+                    
+                    const selection = {
+                        class_id: classId,
+                        class_nr: classData.nr,
+                        class_name: classData.name,
+                        import_class: row.find('.class-import').is(':checked'),
+                        import_startlist: row.find('.startlist-import').is(':checked'),
+                        import_results: row.find('.result-import').is(':checked'),
+                        team_class: row.find('.team-class').is(':checked'),
+                        fei_article: row.find('.fei-article').val()
+                    };
+                    
+                    // Ajouter seulement si au moins une option est sélectionnée
+                    if (selection.import_class || selection.import_startlist || selection.import_results) {
+                        selections.push(selection);
+                    }
+                });
+                
+                if (selections.length === 0) {
+                    alert('Please select at least one import option');
                     return;
                 }
                 
-                const feiId = $('#feiId').val();
-                const button = $('#importButton');
-                const alertDiv = $('#alertMessage');
-                const resultsDiv = $('#results');
-                
-                // Reset UI
-                alertDiv.hide();
-                resultsDiv.hide();
-                $('#startlistResults').hide();
-                
-                // Disable button and show loading
-                button.prop('disabled', true).text('Processing...');
-                
-                // Show info message
-                alertDiv.removeClass('alert-success alert-danger').addClass('alert alert-info');
-                alertDiv.text('Connecting to Hippodata...').show();
-                
-                // Si on veut importer les classes
-                if (importOptions.classes) {
-                    // Make AJAX request pour importer les classes
-                    $.ajax({
-                        url: window.location.href,
-                        type: 'POST',
-                        data: {
-                            action: 'import_classes',
-                            fei_id: feiId,
-                            api_key: '<?php echo $decoded->api_key ?? ''; ?>',
-                            meeting_url: '<?php echo $decoded->payload->meeting_url ?? ''; ?>'
-                        },
-                        dataType: 'json',
-                        success: function(response) {
-                            debugLog('Import classes response:', response);
-                            
-                            // Afficher les infos de debug si mode debug activé
-                            if (debugMode && $('#debugArea').length) {
-                                $('#debugContent').text(JSON.stringify(response, null, 2));
-                            }
-                            
-                            if (response.success || (response.eventId && response.competitions)) {
-                                // Si on a récupéré les données même en cas d'erreur
-                                savedEventId = response.eventId;
-                                savedCompetitions = response.competitions;
-                                
-                                if (response.success) {
-                                    alertDiv.removeClass('alert-info alert-danger').addClass('alert-success');
-                                    alertDiv.text(response.message).show();
-                                } else {
-                                    alertDiv.removeClass('alert-info alert-success').addClass('alert-warning');
-                                    alertDiv.text('Failed to import to Equipe, but data retrieved from Hippodata').show();
-                                }
-                                
-                                // Afficher la liste des compétitions
-                                const competitionList = $('#competitionList');
-                                competitionList.empty();
-                                
-                                if (response.competitions && response.competitions.length > 0) {
-                                    response.competitions.forEach(function(comp) {
-                                        competitionList.append(
-                                            '<li>' + comp.name + '</li>'
-                                        );
-                                    });
-                                } else {
-                                    competitionList.append('<li>No competition details available</li>');
-                                }
-                                
-                                resultsDiv.show();
-                                
-                                // Si on doit aussi importer les startlists
-                                if (importOptions.startlists && savedEventId && savedCompetitions.length > 0) {
-                                    // Importer automatiquement les startlists
-                                    setTimeout(function() {
-                                        importStartlistsAutomatically();
-                                    }, 1000);
-                                } else if (importOptions.results && savedEventId && savedCompetitions.length > 0) {
-                                    // Si on doit importer seulement les résultats (sans startlists)
-                                    setTimeout(function() {
-                                        importResultsAutomatically();
-                                    }, 1000);
-                                } else {
-                                    // Sinon, afficher le bouton pour import manuel
-                                    $('#importStartlistsButton').show();
-                                    button.prop('disabled', false).text('Start Import Process');
-                                }
-                                
-                            } else {
-                                alertDiv.removeClass('alert-info alert-success').addClass('alert-danger');
-                                alertDiv.text('Error: ' + response.error).show();
-                                button.prop('disabled', false).text('Start Import Process');
-                            }
-                        },
-                        error: function(xhr, status, error) {
-                            alertDiv.removeClass('alert-info alert-success').addClass('alert-danger');
-                            alertDiv.text('Request failed: ' + error).show();
-                            button.prop('disabled', false).text('Start Import Process');
-                        }
-                    });
-                } else if (importOptions.startlists || importOptions.results) {
-                    // Si on veut importer les startlists et/ou résultats sans les classes
-                    // Il faut d'abord récupérer les données depuis Hippodata
-                    alertDiv.text('Fetching competition data from Hippodata...').show();
-                    
-                    $.ajax({
-                        url: window.location.href,
-                        type: 'POST',
-                        data: {
-                            action: 'import_classes',
-                            fei_id: feiId,
-                            api_key: '<?php echo $decoded->api_key ?? ''; ?>',
-                            meeting_url: '<?php echo $decoded->payload->meeting_url ?? ''; ?>',
-                            skip_equipe_import: true // Flag pour ne pas envoyer à Equipe
-                        },
-                        dataType: 'json',
-                        success: function(response) {
-                            if ((response.success || response.competitions) && response.eventId) {
-                                savedEventId = response.eventId;
-                                savedCompetitions = response.competitions;
-                                
-                                alertDiv.removeClass('alert-danger').addClass('alert-info');
-                                
-                                if (importOptions.startlists) {
-                                    alertDiv.text('Competition data retrieved. Fetching startlists...').show();
-                                    // Importer directement les startlists
-                                    importStartlistsAutomatically();
-                                } else if (importOptions.results) {
-                                    alertDiv.text('Competition data retrieved. Fetching results...').show();
-                                    // Importer directement les résultats
-                                    importResultsAutomatically();
-                                }
-                            } else {
-                                alertDiv.removeClass('alert-info').addClass('alert-danger');
-                                alertDiv.text('Error fetching competition data: ' + (response.error || 'Unknown error')).show();
-                                button.prop('disabled', false).text('Start Import Process');
-                            }
-                        },
-                        error: function(xhr, status, error) {
-                            alertDiv.removeClass('alert-info').addClass('alert-danger');
-                            alertDiv.text('Request failed: ' + error).show();
-                            button.prop('disabled', false).text('Start Import Process');
-                        }
-                    });
-                }
+                currentSelections = selections;
+                startImport();
             });
             
-            // Fonction pour importer automatiquement les startlists
-           function importStartlistsAutomatically() {
-                const alertDiv = $('#alertMessage');
-                const startlistResultsDiv = $('#startlistResults');
+            // Démarrer l'import
+            function startImport() {
+                $('#selectionStep').hide();
+                $('#resultsStep').show();
+                $('#importProgress').html('<div class="progress-section"><p>Starting import process...</p></div>');
                 
-                alertDiv.removeClass('alert-success alert-danger').addClass('alert alert-info');
-                alertDiv.text('Fetching startlists from Hippodata...').show();
+                // Déterminer ce qui doit être importé
+                importOptions.classes = currentSelections.some(s => s.import_class);
+                importOptions.startlists = currentSelections.some(s => s.import_startlist);
+                importOptions.results = currentSelections.some(s => s.import_results);
+                
+                $.ajax({
+                    url: window.location.href,
+                    type: 'POST',
+                    data: {
+                        action: 'import_selected',
+                        show_id: $('#showId').val(),
+                        selections: JSON.stringify(currentSelections),
+                        api_key: '<?php echo $decoded->api_key ?? ''; ?>',
+                        meeting_url: '<?php echo $decoded->payload->meeting_url ?? ''; ?>'
+                    },
+                    dataType: 'json',
+                    success: function(response) {
+                        if (response.success) {
+                            displayImportResults(response);
+                            
+                            // Si on a des startlists à traiter
+                            if (response.startlists_to_process && response.startlists_to_process.length > 0) {
+                                setTimeout(function() {
+                                    processStartlists(response.event_id, response.startlists_to_process);
+                                }, 1000);
+                            } else if (response.results_to_process && response.results_to_process.length > 0) {
+                                // Si on a seulement des résultats à traiter
+                                setTimeout(function() {
+                                    processResults(response.event_id, response.results_to_process);
+                                }, 1000);
+                            }
+                        } else {
+                            $('#importProgress').html('<p class="alert alert-danger">Error: ' + response.error + '</p>');
+                        }
+                    },
+                    error: function(xhr, status, error) {
+                        $('#importProgress').html('<p class="alert alert-danger">Request failed: ' + error + '</p>');
+                    }
+                });
+            }
+            
+            // Afficher les résultats de l'import
+            function displayImportResults(data) {
+                let html = '<div class="progress-section">';
+                
+                if (data.results.classes && data.results.classes.length > 0) {
+                    html += '<h5>Classes Import Results:</h5>';
+                    data.results.classes.forEach(function(cls) {
+                        const statusClass = cls.status === 'success' ? 'success' : 'failed';
+                        html += '<div class="progress-item ' + statusClass + '">';
+                        html += cls.name + ' - <strong>' + cls.status + '</strong>';
+                        html += '</div>';
+                    });
+                }
+                
+                html += '</div>';
+                $('#importProgress').html(html);
+            }
+            
+            // Traiter les startlists
+            function processStartlists(eventId, startlistsToProcess) {
+                $('#importProgress').append('<div class="progress-section"><h5>Processing Startlists...</h5><div id="startlistProgress"></div></div>');
                 
                 $.ajax({
                     url: window.location.href,
                     type: 'POST',
                     data: {
                         action: 'import_startlists',
-                        event_id: savedEventId,
-                        competitions: JSON.stringify(savedCompetitions),
+                        event_id: eventId,
+                        competitions: JSON.stringify(startlistsToProcess),
                         api_key: '<?php echo $decoded->api_key ?? ''; ?>',
                         meeting_url: '<?php echo $decoded->payload->meeting_url ?? ''; ?>'
                     },
                     dataType: 'json',
                     success: function(response) {
                         if (response.success) {
-                            alertDiv.removeClass('alert-info alert-danger').addClass('alert-success');
-                            alertDiv.text('Startlists fetched successfully. Importing to Equipe...').show();
+                            displayStartlistResults(response);
                             
-                            // Show results
-                            const resultList = $('#startlistResultList');
-                            resultList.empty();
-                            
-                            if (response.processedCompetitions) {
-                                let detailedHtml = '';
-                                
-                                response.processedCompetitions.forEach(function(comp) {
-                                    let statusText = comp.people_count + ' new riders, ' +
-                                        comp.horses_count + ' new horses, ' +
-                                        comp.starts_count + ' starts';
-                                    
-                                    resultList.append(
-                                        '<li><strong>' + comp.name + '</strong>: ' + statusText +
-                                        '<span class="import-status status-pending" id="status-' + comp.foreign_id + '">Pending</span></li>'
-                                    );
-                                    
-                                    // Build detailed view
-                                    detailedHtml += '<div class="competition-details">';
-                                    detailedHtml += '<h6>' + comp.name + '</h6>';
-                                    
-                                    if (comp.people_count > 0) {
-                                        detailedHtml += '<div class="detail-section">';
-                                        detailedHtml += '<strong>New Riders (' + comp.people_count + '):</strong>';
-                                        detailedHtml += '<ul>';
-                                        comp.people.forEach(function(person) {
-                                            detailedHtml += '<li>' + person + '</li>';
-                                        });
-                                        detailedHtml += '</ul></div>';
-                                    }
-                                    
-                                    if (comp.horses_count > 0) {
-                                        detailedHtml += '<div class="detail-section">';
-                                        detailedHtml += '<strong>New Horses (' + comp.horses_count + '):</strong>';
-                                        detailedHtml += '<ul>';
-                                        comp.horses.forEach(function(horse) {
-                                            detailedHtml += '<li>' + horse + '</li>';
-                                        });
-                                        detailedHtml += '</ul></div>';
-                                    }
-                                    
-                                    detailedHtml += '<div class="detail-section">';
-                                    detailedHtml += '<strong>Total Starts: ' + comp.starts_count + '</strong>';
-                                    detailedHtml += '</div>';
-                                    
-                                    detailedHtml += '</div>';
-                                });
-                                
-                                if (debugMode && $('#detailedContent').length) {
-                                    $('#detailedContent').html(detailedHtml);
-                                    $('#detailedResults').show();
-                                }
-                                startlistResultsDiv.show();
-                                
-                                // Now send each batch to Equipe
-                                if (response.batchData && response.batchData.length > 0) {
-                                    // Modifier pour vérifier si on doit aussi importer les résultats
-                                    importBatchesToEquipe(response.batchData, function() {
-                                        // Callback après l'import des startlists
-                                        if (importOptions.results) {
-                                            // Si l'option results est cochée, importer les résultats
+                            // Si on a des données à envoyer vers Equipe
+                            if (response.batchData && response.batchData.length > 0) {
+                                importBatchesToEquipe(response.batchData, function() {
+                                    // Après les startlists, traiter les résultats si nécessaire
+                                    if (importOptions.results) {
+                                        const resultsToProcess = currentSelections
+                                            .filter(s => s.import_results)
+                                            .map(s => ({
+                                                foreign_id: s.class_id,
+                                                class_id: s.class_nr,
+                                                name: s.class_name
+                                            }));
+                                        
+                                        if (resultsToProcess.length > 0) {
                                             setTimeout(function() {
-                                                importResultsAutomatically();
+                                                processResults(eventId, resultsToProcess);
                                             }, 1000);
                                         }
-                                    });
-                                } else {
-                                    $('#importButton').prop('disabled', false).text('Start Import Process');
-                                }
+                                    }
+                                });
                             }
                         } else {
-                            alertDiv.removeClass('alert-info alert-success').addClass('alert-danger');
-                            alertDiv.text('Error: ' + response.error).show();
-                            $('#importButton').prop('disabled', false).text('Start Import Process');
+                            $('#startlistProgress').html('<p class="alert alert-danger">Error: ' + response.error + '</p>');
                         }
                     },
                     error: function(xhr, status, error) {
-                        alertDiv.removeClass('alert-info alert-success').addClass('alert-danger');
-                        alertDiv.text('Request failed: ' + error).show();
-                        $('#importButton').prop('disabled', false).text('Start Import Process');
+                        $('#startlistProgress').html('<p class="alert alert-danger">Request failed: ' + error + '</p>');
                     }
                 });
             }
-            function importResultsAutomatically() {
-                const alertDiv = $('#alertMessage');
+            
+            // Afficher les résultats des startlists
+            function displayStartlistResults(response) {
+                let html = '';
                 
-                alertDiv.removeClass('alert-success alert-danger').addClass('alert alert-info');
-                alertDiv.text('Fetching results from Hippodata...').show();
-                
-                // Créer une nouvelle section pour les résultats
-                if ($('#resultsImportSection').length === 0) {
-                    $('#startlistResults').after(
-                        '<div id="resultsImportSection" class="result-list" style="margin-top: 20px;">' +
-                        '<h4>Results Import:</h4>' +
-                        '<ul id="resultsImportList"></ul>' +
-                        '</div>'
-                    );
+                if (response.processedCompetitions) {
+                    response.processedCompetitions.forEach(function(comp) {
+                        html += '<div class="progress-item pending" id="startlist-' + comp.foreign_id + '">';
+                        html += '<strong>' + comp.name + '</strong>: ';
+                        html += comp.people_count + ' riders, ' + comp.horses_count + ' horses, ' + comp.starts_count + ' starts';
+                        html += '</div>';
+                    });
                 }
+                
+                $('#startlistProgress').html(html);
+            }
+            
+            // Traiter les résultats
+            function processResults(eventId, resultsToProcess) {
+                $('#importProgress').append('<div class="progress-section"><h5>Processing Results...</h5><div id="resultsProgress"></div></div>');
                 
                 $.ajax({
                     url: window.location.href,
                     type: 'POST',
                     data: {
                         action: 'import_results',
-                        event_id: savedEventId,
-                        competitions: JSON.stringify(savedCompetitions),
+                        event_id: eventId,
+                        competitions: JSON.stringify(resultsToProcess),
                         api_key: '<?php echo $decoded->api_key ?? ''; ?>',
                         meeting_url: '<?php echo $decoded->payload->meeting_url ?? ''; ?>'
                     },
                     dataType: 'json',
                     success: function(response) {
-                        debugLog('Import results response:', response);
-                        
                         if (response.success) {
-                            alertDiv.removeClass('alert-info alert-danger').addClass('alert-success');
-                            alertDiv.text('Results fetched successfully. Importing to Equipe...').show();
+                            displayResultsProgress(response);
                             
-                            // Show results summary
-                            const resultsList = $('#resultsImportList');
-                            resultsList.empty();
-                            
-                            if (response.processedCompetitions) {
-                                response.processedCompetitions.forEach(function(comp) {
-                                    let statusText = comp.results_count + ' results';
-                                    
-                                    // Ajouter les temps autorisés
-                                    let timeInfo = [];
-                                    if (comp.time_allowed) {
-                                        timeInfo.push('R1: ' + comp.time_allowed + 's');
-                                    }
-                                    if (comp.time_allowed_jumpoff) {
-                                        timeInfo.push('JO: ' + comp.time_allowed_jumpoff + 's');
-                                    }
-                                    if (comp.time_allowed_round3) {
-                                        timeInfo.push('R3: ' + comp.time_allowed_round3 + 's');
-                                    }
-                                    if (comp.time_allowed_round4) {
-                                        timeInfo.push('R4: ' + comp.time_allowed_round4 + 's');
-                                    }
-                                    if (comp.time_allowed_round5) {
-                                        timeInfo.push('R5: ' + comp.time_allowed_round5 + 's');
-                                    }
-                                    if (comp.time_allowed_round6) {
-                                        timeInfo.push('R6: ' + comp.time_allowed_round6 + 's');
-                                    }
-                                    
-                                    if (timeInfo.length > 0) {
-                                        statusText += ', Time allowed: ' + timeInfo.join(' / ');
-                                    }
-                                    
-                                    // Ajouter le statut de la compétition
-                                    if (comp.status) {
-                                        statusText += ' [' + comp.status + ']';
-                                    }
-                                    
-                                    resultsList.append(
-                                        '<li><strong>' + comp.name + '</strong>: ' + statusText +
-                                        '<span class="import-status status-pending" id="result-status-' + comp.foreign_id + '">Pending</span></li>'
-                                    );
-                                });
-                            }
-                            
-                            // Import results to Equipe
+                            // Si on a des données à envoyer vers Equipe
                             if (response.batchData && response.batchData.length > 0) {
                                 importResultsBatchesToEquipe(response.batchData);
-                            } else {
-                                alertDiv.text('No results to import.').show();
-                                $('#importButton').prop('disabled', false).text('Start Import Process');
                             }
                         } else {
-                            alertDiv.removeClass('alert-info alert-success').addClass('alert-danger');
-                            alertDiv.text('Error fetching results: ' + response.error).show();
-                            $('#importButton').prop('disabled', false).text('Start Import Process');
+                            $('#resultsProgress').html('<p class="alert alert-danger">Error: ' + response.error + '</p>');
                         }
                     },
                     error: function(xhr, status, error) {
-                        alertDiv.removeClass('alert-info alert-success').addClass('alert-danger');
-                        alertDiv.text('Failed to fetch results: ' + error).show();
-                        $('#importButton').prop('disabled', false).text('Start Import Process');
+                        $('#resultsProgress').html('<p class="alert alert-danger">Request failed: ' + error + '</p>');
                     }
                 });
             }
-
-            // 3. Ajouter la fonction pour envoyer les résultats vers Equipe
-            function importResultsBatchesToEquipe(batchDataArray) {
+            
+            // Afficher les résultats
+            function displayResultsProgress(response) {
+                let html = '';
+                
+                if (response.processedCompetitions) {
+                    response.processedCompetitions.forEach(function(comp) {
+                        html += '<div class="progress-item pending" id="result-' + comp.foreign_id + '">';
+                        html += '<strong>' + comp.name + '</strong>: ';
+                        html += comp.results_count + ' results';
+                        
+                        if (comp.time_allowed) {
+                            html += ' (Time allowed: ' + comp.time_allowed + 's)';
+                        }
+                        
+                        html += '</div>';
+                    });
+                }
+                
+                $('#resultsProgress').html(html);
+            }
+            
+            // Importer les batches vers Equipe
+            function importBatchesToEquipe(batchDataArray, onCompleteCallback) {
                 const alertDiv = $('#alertMessage');
+                let importResults = [];
+                
+                // D'abord, consolider tous les people et horses de tous les batches
+                let allPeople = [];
+                let allHorses = [];
+                let competitionStarts = []; // Stocker les starts par compétition
+                
+                // Collecter toutes les données
+                batchDataArray.forEach(function(batch) {
+                    if (batch.data.people && batch.data.people.records) {
+                        allPeople = allPeople.concat(batch.data.people.records);
+                    }
+                    if (batch.data.horses && batch.data.horses.records) {
+                        allHorses = allHorses.concat(batch.data.horses.records);
+                    }
+                    if (batch.data.starts) {
+                        competitionStarts.push({
+                            competition: batch.competition,
+                            competition_foreign_id: batch.competition_foreign_id,
+                            starts: batch.data.starts,
+                            details: batch.details
+                        });
+                    }
+                });
+                
+                // Éliminer les doublons pour people (par foreign_id)
+                const uniquePeople = [];
+                const seenPeopleForeignIds = new Set();
+                allPeople.forEach(function(person) {
+                    if (!seenPeopleForeignIds.has(person.foreign_id)) {
+                        seenPeopleForeignIds.add(person.foreign_id);
+                        uniquePeople.push(person);
+                    }
+                });
+                
+                // Éliminer les doublons pour horses (par foreign_id)
+                const uniqueHorses = [];
+                const seenHorsesForeignIds = new Set();
+                allHorses.forEach(function(horse) {
+                    if (!seenHorsesForeignIds.has(horse.foreign_id)) {
+                        seenHorsesForeignIds.add(horse.foreign_id);
+                        uniqueHorses.push(horse);
+                    }
+                });
+                
+                debugLog('Total unique people to import:', uniquePeople.length);
+                debugLog('Total unique horses to import:', uniqueHorses.length);
+                
+                // Étape 1: Importer d'abord tous les people et horses
+                const transactionUuid1 = generateUuid();
+                const consolidatedBatch = {};
+                
+                if (uniquePeople.length > 0) {
+                    consolidatedBatch.people = {
+                        unique_by: 'foreign_id',
+                        records: uniquePeople
+                    };
+                }
+                
+                if (uniqueHorses.length > 0) {
+                    consolidatedBatch.horses = {
+                        unique_by: 'foreign_id',
+                        records: uniqueHorses
+                    };
+                }
+                
+                // Si on a des people ou des horses à importer
+                if (Object.keys(consolidatedBatch).length > 0) {
+                    $('#startlistProgress').prepend('<div class="progress-item pending">Importing riders and horses...</div>');
+                    
+                    // Utiliser l'action proxy pour éviter CORS
+                    $.ajax({
+                        url: window.location.href,
+                        type: 'POST',
+                        data: {
+                            action: 'send_batch_to_equipe',
+                            batch_data: JSON.stringify(consolidatedBatch),
+                            api_key: '<?php echo $decoded->api_key ?? ''; ?>',
+                            meeting_url: '<?php echo $decoded->payload->meeting_url ?? ''; ?>',
+                            transaction_uuid: transactionUuid1
+                        },
+                        dataType: 'json',
+                        success: function(response) {
+                            if (response.success) {
+                                debugLog('People and horses imported successfully');
+                                $('#startlistProgress .progress-item:first').removeClass('pending').addClass('success').html('Riders and horses imported successfully');
+                                
+                                // Étape 2: Importer les starts pour chaque compétition
+                                importStartlists();
+                            } else {
+                                $('#startlistProgress .progress-item:first').removeClass('pending').addClass('failed').html('Failed to import riders and horses');
+                                debugLog('Failed to import people and horses:', response);
+                            }
+                        },
+                        error: function(xhr, status, error) {
+                            $('#startlistProgress .progress-item:first').removeClass('pending').addClass('failed').html('Failed to import riders and horses');
+                            debugLog('Request failed:', error);
+                        }
+                    });
+                } else {
+                    // Si pas de people/horses à importer, passer directement aux starts
+                    importStartlists();
+                }
+                
+                // Fonction pour importer les startlists après les people/horses
+                function importStartlists() {
+                    let successCount = 0;
+                    let failCount = 0;
+                    let processed = 0;
+                    const total = competitionStarts.length;
+                    
+                    competitionStarts.forEach(function(compStarts) {
+                        const transactionUuid = generateUuid();
+                        
+                        debugLog('Sending batch for:', compStarts.competition);
+                        
+                        // Utiliser l'action proxy pour éviter CORS
+                        $.ajax({
+                            url: window.location.href,
+                            type: 'POST',
+                            data: {
+                                action: 'send_batch_to_equipe',
+                                batch_data: JSON.stringify({ starts: compStarts.starts }),
+                                api_key: '<?php echo $decoded->api_key ?? ''; ?>',
+                                meeting_url: '<?php echo $decoded->payload->meeting_url ?? ''; ?>',
+                                transaction_uuid: transactionUuid
+                            },
+                            dataType: 'json',
+                            success: function(response) {
+                                if (response.success) {
+                                    successCount++;
+                                    $('#startlist-' + compStarts.competition_foreign_id).removeClass('pending').addClass('success');
+                                } else {
+                                    failCount++;
+                                    $('#startlist-' + compStarts.competition_foreign_id).removeClass('pending').addClass('failed');
+                                    debugLog('Import failed for:', compStarts.competition);
+                                    debugLog('Response:', response);
+                                }
+                                
+                                processed++;
+                                checkComplete();
+                            },
+                            error: function(xhr, status, error) {
+                                failCount++;
+                                $('#startlist-' + compStarts.competition_foreign_id).removeClass('pending').addClass('failed');
+                                debugLog('Request failed for:', compStarts.competition);
+                                debugLog('Error:', error);
+                                
+                                processed++;
+                                checkComplete();
+                            }
+                        });
+                    });
+                    
+                    function checkComplete() {
+                        if (processed === total) {
+                            // Appeler le callback si fourni
+                            if (typeof onCompleteCallback === 'function') {
+                                onCompleteCallback();
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // Importer les résultats vers Equipe
+            function importResultsBatchesToEquipe(batchDataArray) {
                 let successCount = 0;
                 let failCount = 0;
                 let processed = 0;
@@ -1425,17 +1624,10 @@ if ($decoded && isset($decoded->payload->target)) {
                         success: function(response) {
                             if (response.success) {
                                 successCount++;
-                                $('#result-status-' + batch.competition_foreign_id)
-                                    .removeClass('status-pending status-error')
-                                    .addClass('status-success')
-                                    .text('Success');
+                                $('#result-' + batch.competition_foreign_id).removeClass('pending').addClass('success');
                             } else {
                                 failCount++;
-                                $('#result-status-' + batch.competition_foreign_id)
-                                    .removeClass('status-pending status-success')
-                                    .addClass('status-error')
-                                    .text('Failed');
-                                
+                                $('#result-' + batch.competition_foreign_id).removeClass('pending').addClass('failed');
                                 debugLog('Results import failed for:', batch.competition);
                                 debugLog('Response:', response);
                             }
@@ -1445,11 +1637,7 @@ if ($decoded && isset($decoded->payload->target)) {
                         },
                         error: function(xhr, status, error) {
                             failCount++;
-                            $('#result-status-' + batch.competition_foreign_id)
-                                .removeClass('status-pending status-success')
-                                .addClass('status-error')
-                                .text('Failed');
-                            
+                            $('#result-' + batch.competition_foreign_id).removeClass('pending').addClass('failed');
                             debugLog('Request failed for results:', batch.competition);
                             debugLog('Error:', error);
                             
@@ -1461,430 +1649,47 @@ if ($decoded && isset($decoded->payload->target)) {
                 
                 function checkComplete() {
                     if (processed === total) {
-                        // Show final summary
-                        let summaryHtml = '<div style="margin-top: 20px; padding: 15px; background-color: #f8f9fa; border-radius: 4px;">';
-                        summaryHtml += '<h5>Results Import Summary</h5>';
-                        
-                        if (failCount === 0) {
-                            alertDiv.removeClass('alert-info alert-danger').addClass('alert-success');
-                            alertDiv.text('All results imported successfully!').show();
-                            summaryHtml += '<p class="text-success">✓ All ' + successCount + ' competition results imported successfully!</p>';
-                        } else {
-                            alertDiv.removeClass('alert-info alert-success').addClass('alert-warning');
-                            alertDiv.text(successCount + ' results imported successfully, ' + failCount + ' failed.').show();
-                            summaryHtml += '<p class="text-warning">⚠ ' + successCount + ' competition results imported successfully, ' + failCount + ' failed.</p>';
-                        }
-                        
-                        // Count total results imported
-                        let totalResults = 0;
-                        batchDataArray.forEach(function(batch) {
-                            if (batch.data.starts && batch.data.starts.records) {
-                                totalResults += batch.data.starts.records.length;
-                            }
-                        });
-                        
-                        summaryHtml += '<div><strong>Total imported:</strong></div>';
-                        summaryHtml += '<ul>';
-                        summaryHtml += '<li>' + totalResults + ' individual results</li>';
-                        summaryHtml += '<li>' + successCount + ' competitions updated with results</li>';
-                        summaryHtml += '</ul>';
-                        
-                        summaryHtml += '</div>';
-                        
-                        // Ajouter le résumé après la liste des résultats
-                        $('#resultsImportList').after(summaryHtml);
-                        
-                        // Réactiver le bouton principal
-                        $('#importButton').prop('disabled', false).text('Start Import Process');
+                        // Afficher le résumé final
+                        showFinalSummary();
                     }
                 }
             }
             
-            // Import startlists button handler (pour import manuel)
-            $('#importStartlistsButton').on('click', function() {
-                debugLog('Import startlists clicked');
-                debugLog('Event ID:', savedEventId);
-                debugLog('Competitions:', savedCompetitions);
+            // Afficher le résumé final
+            function showFinalSummary() {
+                let html = '<div class="progress-section">';
+                html += '<h5>Import Complete!</h5>';
+                html += '<div class="alert alert-success">';
+                html += 'The import process has been completed. Check the progress above for details.';
+                html += '</div>';
+                html += '</div>';
                 
-                const button = $(this);
-                const alertDiv = $('#alertMessage');
-                const startlistResultsDiv = $('#startlistResults');
-                
-                if (!savedEventId || !savedCompetitions || savedCompetitions.length === 0) {
-                    alertDiv.removeClass('alert-success alert-info').addClass('alert alert-danger');
-                    alertDiv.text('Error: No event ID or competitions found. Please import classes first.').show();
-                    return;
-                }
-                
-                button.prop('disabled', true).text('Importing startlists...');
-                
-                alertDiv.removeClass('alert-success alert-danger').addClass('alert alert-info');
-                alertDiv.text('Fetching startlists from Hippodata...').show();
-                
-                $.ajax({
-                    url: window.location.href,
-                    type: 'POST',
-                    data: {
-                        action: 'import_startlists',
-                        event_id: savedEventId,
-                        competitions: JSON.stringify(savedCompetitions),
-                        api_key: '<?php echo $decoded->api_key ?? ''; ?>',
-                        meeting_url: '<?php echo $decoded->payload->meeting_url ?? ''; ?>'
-                    },
-                    dataType: 'json',
-                    success: function(response) {
-                        if (response.success) {
-                            alertDiv.removeClass('alert-info alert-danger').addClass('alert-success');
-                            alertDiv.text('Startlists fetched successfully. Ready to import to Equipe.').show();
-                            
-                            // Show results
-                            const resultList = $('#startlistResultList');
-                            resultList.empty();
-                            
-                            if (response.processedCompetitions) {
-                                let detailedHtml = '';
-                                
-                                response.processedCompetitions.forEach(function(comp) {
-                                    let statusText = comp.people_count + ' new riders, ' +
-                                        comp.horses_count + ' new horses, ' +
-                                        comp.starts_count + ' starts';
-                                    
-                                    // Ajouter debug info si disponible
-                                    if (comp.debug) {
-                                        statusText += ' (Total: ' + comp.debug.total_competitors + ' competitors)';
-                                    }
-                                    
-                                    resultList.append(
-                                        '<li><strong>' + comp.name + '</strong>: ' + statusText +
-                                        '<span class="import-status status-pending" id="status-' + comp.foreign_id + '">Pending</span></li>'
-                                    );
-                                    
-                                    // Log debug info si disponible
-                                    if (comp.debug) {
-                                        debugLog('Competition:', comp.name);
-                                        debugLog('Debug info:', comp.debug);
-                                    }
-                                    
-                                    // Build detailed view
-                                    detailedHtml += '<div class="competition-details">';
-                                    detailedHtml += '<h6>' + comp.name + '</h6>';
-                                    
-                                    if (comp.people_count > 0) {
-                                        detailedHtml += '<div class="detail-section">';
-                                        detailedHtml += '<strong>New Riders (' + comp.people_count + '):</strong>';
-                                        detailedHtml += '<ul>';
-                                        comp.people.forEach(function(person) {
-                                            detailedHtml += '<li>' + person + '</li>';
-                                        });
-                                        detailedHtml += '</ul></div>';
-                                    }
-                                    
-                                    if (comp.horses_count > 0) {
-                                        detailedHtml += '<div class="detail-section">';
-                                        detailedHtml += '<strong>New Horses (' + comp.horses_count + '):</strong>';
-                                        detailedHtml += '<ul>';
-                                        comp.horses.forEach(function(horse) {
-                                            detailedHtml += '<li>' + horse + '</li>';
-                                        });
-                                        detailedHtml += '</ul></div>';
-                                    }
-                                    
-                                    detailedHtml += '<div class="detail-section">';
-                                    detailedHtml += '<strong>Total Starts: ' + comp.starts_count + '</strong>';
-                                    detailedHtml += '</div>';
-                                    
-                                    detailedHtml += '</div>';
-                                });
-                                
-                                if (debugMode && $('#detailedContent').length) {
-                                    $('#detailedContent').html(detailedHtml);
-                                    $('#detailedResults').show();
-                                }
-                                startlistResultsDiv.show();
-                                
-                                // Now send each batch to Equipe
-                                if (response.batchData && response.batchData.length > 0) {
-                                    importBatchesToEquipe(response.batchData);
-                                }
-                            }
-                        } else {
-                            alertDiv.removeClass('alert-info alert-success').addClass('alert-danger');
-                            alertDiv.text('Error: ' + response.error).show();
-                        }
-                    },
-                    error: function(xhr, status, error) {
-                        alertDiv.removeClass('alert-info alert-success').addClass('alert-danger');
-                        alertDiv.text('Request failed: ' + error).show();
-                    },
-                    complete: function() {
-                        button.prop('disabled', false).text('Import Startlists for All Competitions');
-                    }
+                $('#importProgress').append(html);
+            }
+            
+            // Générer un UUID
+            function generateUuid() {
+                return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+                    var r = Math.random() * 16 | 0,
+                        v = c == 'x' ? r : (r & 0x3 | 0x8);
+                    return v.toString(16);
                 });
+            }
+            
+            // Nouveau bouton d'import
+            $('#newImportButton').on('click', function() {
+                $('#resultsStep').hide();
+                $('#searchStep').show();
+                $('#showId').val('');
+                currentEventData = null;
+                currentSelections = [];
+                importOptions = {
+                    classes: false,
+                    startlists: false,
+                    results: false
+                };
             });
         });
-        
-        function importBatchesToEquipe(batchDataArray, onCompleteCallback) {
-            const alertDiv = $('#alertMessage');
-            let importResults = [];
-            
-            // D'abord, consolider tous les people et horses de tous les batches
-            let allPeople = [];
-            let allHorses = [];
-            let competitionStarts = []; // Stocker les starts par compétition
-            
-            // Collecter toutes les données
-            batchDataArray.forEach(function(batch) {
-                if (batch.data.people && batch.data.people.records) {
-                    allPeople = allPeople.concat(batch.data.people.records);
-                }
-                if (batch.data.horses && batch.data.horses.records) {
-                    allHorses = allHorses.concat(batch.data.horses.records);
-                }
-                if (batch.data.starts) {
-                    competitionStarts.push({
-                        competition: batch.competition,
-                        competition_foreign_id: batch.competition_foreign_id,
-                        starts: batch.data.starts,
-                        details: batch.details
-                    });
-                }
-            });
-            
-            // Éliminer les doublons pour people (par foreign_id)
-            const uniquePeople = [];
-            const seenPeopleForeignIds = new Set();
-            allPeople.forEach(function(person) {
-                if (!seenPeopleForeignIds.has(person.foreign_id)) {
-                    seenPeopleForeignIds.add(person.foreign_id);
-                    uniquePeople.push(person);
-                }
-            });
-            
-            // Éliminer les doublons pour horses (par foreign_id)
-            const uniqueHorses = [];
-            const seenHorsesForeignIds = new Set();
-            allHorses.forEach(function(horse) {
-                if (!seenHorsesForeignIds.has(horse.foreign_id)) {
-                    seenHorsesForeignIds.add(horse.foreign_id);
-                    uniqueHorses.push(horse);
-                }
-            });
-            
-            console.log('Total unique people to import:', uniquePeople.length);
-            console.log('Total unique horses to import:', uniqueHorses.length);
-            
-            // Étape 1: Importer d'abord tous les people et horses
-            const transactionUuid1 = generateUuid();
-            const consolidatedBatch = {};
-            
-            if (uniquePeople.length > 0) {
-                consolidatedBatch.people = {
-                    unique_by: 'foreign_id',
-                    records: uniquePeople
-                };
-            }
-            
-            if (uniqueHorses.length > 0) {
-                consolidatedBatch.horses = {
-                    unique_by: 'foreign_id',
-                    records: uniqueHorses
-                };
-            }
-            
-            // Si on a des people ou des horses à importer
-            if (Object.keys(consolidatedBatch).length > 0) {
-                alertDiv.removeClass('alert-success alert-danger').addClass('alert alert-info');
-                alertDiv.text('Importing all riders and horses...').show();
-                
-                // Utiliser l'action proxy pour éviter CORS
-                $.ajax({
-                    url: window.location.href,
-                    type: 'POST',
-                    data: {
-                        action: 'send_batch_to_equipe',
-                        batch_data: JSON.stringify(consolidatedBatch),
-                        api_key: '<?php echo $decoded->api_key ?? ''; ?>',
-                        meeting_url: '<?php echo $decoded->payload->meeting_url ?? ''; ?>',
-                        transaction_uuid: transactionUuid1
-                    },
-                    dataType: 'json',
-                    success: function(response) {
-                        if (response.success) {
-                            debugLog('People and horses imported successfully');
-                            alertDiv.text('Riders and horses imported. Now importing startlists...').show();
-                            
-                            // Étape 2: Importer les starts pour chaque compétition
-                            importStartlists();
-                        } else {
-                            alertDiv.removeClass('alert-info').addClass('alert-danger');
-                            alertDiv.text('Failed to import riders and horses: ' + response.error).show();
-                            debugLog('Failed to import people and horses:', response);
-                        }
-                    },
-                    error: function(xhr, status, error) {
-                        alertDiv.removeClass('alert-info').addClass('alert-danger');
-                        alertDiv.text('Failed to import riders and horses: ' + error).show();
-                        debugLog('Request failed:', error);
-                    }
-                });
-            } else {
-                // Si pas de people/horses à importer, passer directement aux starts
-                importStartlists();
-            }
-            
-            // Fonction pour importer les startlists après les people/horses
-            function importStartlists() {
-                let successCount = 0;
-                let failCount = 0;
-                let processed = 0;
-                const total = competitionStarts.length;
-                
-                competitionStarts.forEach(function(compStarts) {
-                    const transactionUuid = generateUuid();
-                    
-                    // Log pour debug
-                    debugLog('Sending batch for:', compStarts.competition);
-                    
-                    // Utiliser l'action proxy pour éviter CORS
-                    $.ajax({
-                        url: window.location.href,
-                        type: 'POST',
-                        data: {
-                            action: 'send_batch_to_equipe',
-                            batch_data: JSON.stringify({ starts: compStarts.starts }),
-                            api_key: '<?php echo $decoded->api_key ?? ''; ?>',
-                            meeting_url: '<?php echo $decoded->payload->meeting_url ?? ''; ?>',
-                            transaction_uuid: transactionUuid
-                        },
-                        dataType: 'json',
-                        success: function(response) {
-                            if (response.success) {
-                                successCount++;
-                                processed++;
-                                $('#status-' + compStarts.competition_foreign_id).removeClass('status-pending status-error').addClass('status-success').text('Success');
-                                
-                                importResults.push({
-                                    competition: compStarts.competition,
-                                    status: 'success',
-                                    transactionUuid: transactionUuid,
-                                    details: compStarts.details,
-                                    response: response
-                                });
-                            } else {
-                                failCount++;
-                                processed++;
-                                $('#status-' + compStarts.competition_foreign_id).removeClass('status-pending status-success').addClass('status-error').text('Failed');
-                                
-                                debugLog('Import failed for:', compStarts.competition);
-                                debugLog('Response:', response);
-                                
-                                importResults.push({
-                                    competition: compStarts.competition,
-                                    status: 'failed',
-                                    transactionUuid: transactionUuid,
-                                    details: compStarts.details,
-                                    error: response.error
-                                });
-                            }
-                            
-                            checkComplete();
-                        },
-                        error: function(xhr, status, error) {
-                            failCount++;
-                            processed++;
-                            $('#status-' + compStarts.competition_foreign_id).removeClass('status-pending status-success').addClass('status-error').text('Failed');
-                            
-                            debugLog('Request failed for:', compStarts.competition);
-                            debugLog('Error:', error);
-                            
-                            importResults.push({
-                                competition: compStarts.competition,
-                                status: 'failed',
-                                transactionUuid: transactionUuid,
-                                details: compStarts.details,
-                                error: error
-                            });
-                            
-                            checkComplete();
-                        }
-                    });
-                });
-                
-                function checkComplete() {
-                    if (processed === total) {
-                        // Show final summary
-                        let summaryHtml = '<div style="margin-top: 20px; padding: 15px; background-color: #f8f9fa; border-radius: 4px;">';
-                        summaryHtml += '<h5>Import Summary</h5>';
-                        
-                        if (failCount === 0) {
-                            alertDiv.removeClass('alert-info alert-danger').addClass('alert-success');
-                            alertDiv.text('All startlists imported successfully!').show();
-                            summaryHtml += '<p class="text-success">✓ All ' + successCount + ' competitions imported successfully!</p>';
-                        } else {
-                            alertDiv.removeClass('alert-info alert-success').addClass('alert-warning');
-                            alertDiv.text(successCount + ' startlists imported successfully, ' + failCount + ' failed.').show();
-                            summaryHtml += '<p class="text-warning">⚠ ' + successCount + ' competitions imported successfully, ' + failCount + ' failed.</p>';
-                        }
-                        
-                        // Count totals
-                        summaryHtml += '<div><strong>Total imported:</strong></div>';
-                        summaryHtml += '<ul>';
-                        summaryHtml += '<li>' + uniquePeople.length + ' unique riders</li>';
-                        summaryHtml += '<li>' + uniqueHorses.length + ' unique horses</li>';
-                        summaryHtml += '<li>' + importResults.reduce((acc, r) => acc + (r.status === 'success' ? r.details.starts.length : 0), 0) + ' starts</li>';
-                        summaryHtml += '</ul>';
-                        
-                        // Transaction UUIDs - only in debug mode
-                        if (debugMode) {
-                            summaryHtml += '<div style="margin-top: 10px;"><strong>Transaction UUIDs (for rollback if needed):</strong></div>';
-                            summaryHtml += '<ul style="font-size: 12px;">';
-                            if (uniquePeople.length > 0 || uniqueHorses.length > 0) {
-                                summaryHtml += '<li>People & Horses: <code>' + transactionUuid1 + '</code></li>';
-                            }
-                            importResults.forEach(function(result) {
-                                if (result.status === 'success') {
-                                    summaryHtml += '<li>' + result.competition + ' starts: <code>' + result.transactionUuid + '</code></li>';
-                                }
-                            });
-                            summaryHtml += '</ul>';
-                        }
-                        
-                        summaryHtml += '</div>';
-                        
-                        if (debugMode && $('#detailedContent').length) {
-                            $('#detailedContent').append(summaryHtml);
-                        } else {
-                            // Si pas en mode debug, ajouter juste le résumé sans les UUIDs
-                            let simpleSummaryHtml = '<div style="margin-top: 20px; padding: 15px; background-color: #f8f9fa; border-radius: 4px;">';
-                            simpleSummaryHtml += '<h5>Import Summary</h5>';
-                            if (failCount === 0) {
-                                simpleSummaryHtml += '<p class="text-success">✓ All ' + successCount + ' competitions imported successfully!</p>';
-                            } else {
-                                simpleSummaryHtml += '<p class="text-warning">⚠ ' + successCount + ' competitions imported successfully, ' + failCount + ' failed.</p>';
-                            }
-                            simpleSummaryHtml += '</div>';
-                            $('#startlistResultList').after(simpleSummaryHtml);
-                        }
-                        
-                        // Appeler le callback si fourni
-                        if (typeof onCompleteCallback === 'function') {
-                            onCompleteCallback();
-                        } else {
-                            // Réactiver le bouton principal si pas de callback
-                            $('#importButton').prop('disabled', false).text('Start Import Process');
-                        }
-                    }
-                }
-            }
-        }
-        
-        function generateUuid() {
-            return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-                var r = Math.random() * 16 | 0,
-                    v = c == 'x' ? r : (r & 0x3 | 0x8);
-                return v.toString(16);
-            });
-        }
     </script>
 </body>
 </html>

@@ -1,7 +1,7 @@
     .import-container {
-        max-width: 600px;
+        max-width: 100%;
         margin: 0 auto;
-        padding: 20px;
+        padding: 5px;
     }
     .form-group {
         margin-bottom: 20px;
@@ -136,4 +136,80 @@
     }
     .text-warning {
         color: #856404;
+    }
+    .classes-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 20px;
+    }
+
+    .classes-table th,
+    .classes-table td {
+        border: 1px solid #ddd;
+        padding: 8px;
+        text-align: left;
+    }
+
+    .classes-table th {
+        background-color: #f2f2f2;
+        font-weight: bold;
+    }
+
+    .classes-table tr:nth-child(even) {
+        background-color: #f9f9f9;
+    }
+
+    .classes-table input[type="checkbox"] {
+        cursor: pointer;
+    }
+
+    .classes-table select {
+        width: 100%;
+        padding: 4px;
+    }
+
+    .action-buttons {
+        margin-top: 20px;
+        text-align: center;
+    }
+
+    .action-buttons button {
+        margin: 0 10px;
+    }
+
+    #eventInfo {
+        background-color: #f0f0f0;
+        padding: 15px;
+        border-radius: 5px;
+        margin-bottom: 20px;
+    }
+
+    .select-all-row {
+        background-color: #e8e8e8 !important;
+        font-weight: bold;
+    }
+
+    .progress-section {
+        margin-top: 20px;
+        padding: 15px;
+        background-color: #f8f9fa;
+        border-radius: 5px;
+    }
+
+    .progress-item {
+        margin: 10px 0;
+        padding: 10px;
+        border-left: 4px solid #ccc;
+    }
+
+    .progress-item.success {
+        border-left-color: #28a745;
+    }
+
+    .progress-item.failed {
+        border-left-color: #dc3545;
+    }
+
+    .progress-item.pending {
+        border-left-color: #ffc107;
     }
