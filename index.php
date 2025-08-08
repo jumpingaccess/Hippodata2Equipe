@@ -106,8 +106,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                 'success' => true,
                 'event' => [
                     'id' => $hippodataData['EVENT']['ID'] ?? $showId,
-                    'name' => $hippodataData['EVENT']['NAME'] ?? '',
-                    'venue' => $hippodataData['EVENT']['VENUE'] ?? ''
+                    'name' => $hippodataData['EVENT']['CAPTION'] ?? '',
+                    'venue' => $hippodataData['EVENT']['LOCATION'] ?? ''
                 ],
                 'classes' => $classes
             ]);
@@ -186,6 +186,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                         'tavlingspl' => $classData['CATEGORY'] ?? '',
                         'z' => 'H',
                         'x' => 'I',
+                        'alias'=> true,
                         'premie_curr' => $classData['PRIZE']['CURRENCY'] ?? 'EUR',
                         'prsum1' => $classData['PRIZE']['MONEY'] ?? 0
                     ];
@@ -1058,22 +1059,56 @@ if ($decoded && isset($decoded->payload->target)) {
                         <td>
                             <select id="selectAllArticle">
                                 <option value="">-- Select --</option>
-                                <option value="238.2.1">238.2.1 - Comp. not against the clock</option>
-                                <option value="238.2.2">238.2.2 - Comp. against the clock</option>
-                                <option value="238.1.1">238.1.1 - Comp. with jump-off</option>
-                                <option value="239">239 - Comp. with winning round</option>
-                                <option value="263">263 - Relay competitions</option>
-                                <option value="264">264 - Fault and Out competition</option>
-                                <option value="265">265 - Hit and Hurry competition</option>
-                                <option value="266">266 - Accumulator competition</option>
-                                <option value="267">267 - Top Score competition</option>
-                                <option value="268">268 - Take Your Own Line</option>
-                                <option value="269">269 - Knock-Out competition</option>
-                                <option value="270">270 - Two or Several Phases</option>
-                                <option value="271">271 - Competition in Groups</option>
-                                <option value="272">272 - Competition with a Joker</option>
-                                <option value="273">273 - Derby</option>
-                                <option value="274">274 - Competition over Combinations</option>
+                                <option style="background: #2980b9; color: #ffffff;" disabled>238.1</option>
+                                <option value="238.1.1">Table A. Not against the clock (238.1.1)</option>
+                                <option value="238.1.1">Table A. Not against the clock with jump off not atc (238.1.1)</option>
+                                <option value="238.1.2">Table A. One round not atc with one jump-off atc (238.1.2)</option>
+                                <option value="238.1.3">Table A. Not against the clock with jump off (238.1.3)</option>
+                                <option value="238.1.3">Table A. One round with two jump-offs (238.1.3)</option>
+                                <option style="background: #2980b9; color: #ffffff;" disabled>238.2</option>
+                                <option value="238.2.1">Table A. Against the clock, no jump off (238.2.1)</option>
+                                <option value="238.2.1b">Table A. One round against the clock equalty of faults and time jump off (238.2.1b)</option>
+                                <option value="238.2.2">Table A. One round with one jump off (238.2.2)</option>
+                                <option value="238.2.2 + 245.3">Table A against the clock with Immediate jump off (238.2.2 + 245.3)</option>
+                                <option value="238.2.3">Table A. One round with two jump-offs (238.2.3)</option>
+                                <option style="background: #2980b9; color: #ffffff;" disabled>other</option>
+                                <option value="239">Table C. Against the clock (239)</option>
+                                <option value="262.2, 262.3">Five rounds, not atc (262.2, 262.3)</option>
+                                <option value="263">Table C. Against the clock (263)</option>
+                                <option value="266">Fault and Out (266)</div>
+                                <option value="267">Hit and Hurry (267)</div>
+                                <option value="268.2.1">Relay competition - Table C (268.2.1)</div>
+                                <option value="269">Accumulator against the clock (269)</div>
+                                <option value="269.4">Accumulator with a jump off (269.4)</div>
+                                <option value="270">Top score competition (270)</div>
+                                <option value="271">Take-your-own-line (271)</div>
+                                <option value="275">Competition in groups against the clock (275)</div>
+                                <option style="background: #2980b9; color: #ffffff;" disabled>2 Rounds</option>
+                                <option value="273.3.1, 4.1">Table A. 1st round against the clock - 2nd round not against the clock, jump off against the clock (273.3.1, 4.1)</div>
+                                <option value="273.3.2, 4.2">Table A. Two rounds not against the clock, jump off (273.3.2, 4.2)</div>
+                                <option value="273.3.3.1">Table A. Two rounds, both against the clock (273.3.3.1)</div>
+                                <option value="273.3.4.1">Table A. Two rounds, both against the clock, with jump-off (273.3.4.1)</div>
+                                <option value="273.4.3a">Table A. Two rounds, 2nd round against the clock (273.4.3a)</div>
+                                <option value="273.4.3b">Table A. Two rounds, both against the clock (273.4.3b)</div>
+                                <option value="273.4.4">Table A. Two rounds aggregated, with jump off atc (273.4.4)</div>
+                                <option value="276.1">Two rounds and a Winning Round (276.1)</div>
+                                <option value="276.2">One round and a winning round with 0 points (276.2)</div>
+                                <option value="276.3">One round and a winning round (276.3)</div>
+                                <option style="background: #2980b9; color: #ffffff;" disabled>2 Phases</option>
+                                <option value="274.1.5.1">Table A. Two phases not against the clock (274.1.5.1)</div>
+                                <option value="274.1.5.2">Table A. Two phases, the second against the clock (274.1.5.2)</div>
+                                <option value="274.1.5.3">Table A. Two phases, both against the clock (274.1.5.3)</div>
+                                <option value="274.1.5.4">Table A and C. Two phases. First phase not atc and second atc (274.1.5.4)</div>
+                                <option value="274.2.5">Special Two Phase Competition (274.2.5)</div>
+                                <option value="282.4.5">Table A. Two phases. Against the clock and table C (282.4.5)</div>
+                                <option style="background: #2980b9; color: #ffffff;" disabled>Nations Cup / Team Class</option>
+                                <option value="264.10.2">Nations Cup (264.10.2)</div>
+                                <option value="264.10.3">Nations Cup (264.10.3)</div>
+                                <option value="264.10.3">Nations Cup (1 round against the clock) (264.10.3)</div>
+                                <option value="264.10.3">Nations Cup (1 round against the clock and jump-off -all riders) (264.10.3)</div>
+                                <option value="264.10.4">Nations Cup (order 2nd round based on penalties only) (264.10.4)</div>
+                                <option value="264.10.7">Nations Cup (264.1.7)</div>
+                                <option value="265.2+273.3.3.2">Other Team Competition - two rounds without a jump-off (265.2+273.3.3.2)</div>
                             </select>
                         </td>
                     </tr>
@@ -1171,7 +1206,7 @@ if ($decoded && isset($decoded->payload->target)) {
                 
                 data.classes.forEach(function(cls, index) {
                     const row = $('<tr>');
-                    row.append('<td>' + cls.name + '</td>');
+                    row.append('<td>' + index+ " "+cls.name + '</td>');
                     row.append('<td>' + cls.date + '</td>');
                     row.append('<td><input type="checkbox" class="class-import" data-class-id="' + cls.id + '" data-index="' + index + '"></td>');
                     row.append('<td><input type="checkbox" class="startlist-import" data-class-id="' + cls.id + '" data-index="' + index + '"></td>');
