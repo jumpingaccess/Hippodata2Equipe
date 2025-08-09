@@ -854,7 +854,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                     // Un seul concurrent, le mettre dans un tableau
                     $competitors = [$competitors];
                 }
-                
+                $eliminatedRank = null;
+                foreach ($competitors as $compet) {
+                    $compResultTotal = $compet['RESULTTOTAL'][0] ?? [];
+                    if (isset($compResultTotal['STATUS']) && $compResultTotal['STATUS'] != 1) {
+                        $compStatusText = strtolower($compResultTotal['TEXT'] ?? '');
+                        if (($compStatusText == 'eliminated' || $compStatusText == 'retired' ) && isset($compResultTotal['RANK'])) {
+                            $eliminatedRank = (int)$compResultTotal['RANK'];
+                            break;
+                        }
+                    }
+                }
                 foreach ($competitors as $competitor) {
                     $rider = $competitor['RIDER'] ?? [];
                     $horse = $competitor['HORSE'] ?? [];
@@ -865,7 +875,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                     if (!$riderFeiId || !$horseFeiId) {
                         continue; // Skip si pas d'identifiants
                     }
-                    
+
                     // Préparer le résultat
                     $result = [
                         'foreign_id' => $riderFeiId . '_' . $horseFeiId . '_' . $competitionForeignId,
@@ -882,7 +892,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                     
                     // Initialiser les valeurs par défaut
                     $result['ord'] = (int)($competitor['SORTORDER'] ?? 1000);
-                    $result['st'] = (string)($competitor['SORTORDER'] ?? '1');
+                    //$result['st'] = (string)($competitor['SORTORDER'] ?? '1');
                     
                     // Mapper les résultats selon les rounds
                     foreach ($resultDetails as $roundResult) {
@@ -973,24 +983,97 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                     
                     // Vérifier si le cavalier a été éliminé, retraité, etc.
                     // En se basant sur le STATUS et d'autres indicateurs
-                    if ($status != 1 || $state != 0) {
-                        // Chercher dans tous les rounds pour trouver où l'élimination s'est produite
-                        foreach ($resultDetails as $roundResult) {
-                            if (isset($roundResult['STATUS']) && $roundResult['STATUS'] != 1) {
-                                // Le cavalier a eu un problème dans ce round
-                                $roundStatus = $roundResult['STATUS'];
-                                
-                                // Mapper les statuts Hippodata vers Equipe
-                                // Ces mappings peuvent nécessiter des ajustements selon la documentation exacte
-                                if ($roundStatus == 2 || stripos($roundResult['NAME'] ?? '', 'retired') !== false) {
-                                    $result['or'] = 'U'; // Retired/Abandonné
-                                } elseif ($roundStatus == 3 || stripos($roundResult['NAME'] ?? '', 'eliminated') !== false) {
-                                    $result['or'] = 'D'; // Eliminated/Éliminé
-                                } elseif ($roundStatus == 4 || stripos($roundResult['NAME'] ?? '', 'disqualified') !== false) {
-                                    $result['or'] = 'S'; // Disqualified/Disqualifié
-                                }
-                                break;
+                    // Traiter les états spéciaux (retraité, éliminé, disqualifié)
+                    // Traiter les états spéciaux (retraité, éliminé, disqualifié)
+                    if (isset($resultTotal['STATUS']) && $resultTotal['STATUS'] != 1) {
+                        // Le cavalier a un statut spécial
+                        $statusText = strtolower($resultTotal['TEXT'] ?? '');
+                        $roundName = strtolower($resultTotal['NAME'] ?? '');
+
+                        // Mapper les statuts basés sur le texte
+                        if ($statusText == 'retired') {
+                            $result['or'] = 'U'; // Retired/Abandonné
+                            $result['result_preview'] = 'Ret.'; // Retired/Abandonné
+                            $result['grundf'] = 999;
+                            $result['grundt'] = 999;
+                            $result['tfg'] = null;
+                            $result['re'] = $eliminatedRank;
+                        } elseif ($statusText == 'eliminated') {
+                            $result['or'] = 'D'; // Eliminated/Éliminé
+                            $result['result_preview'] = 'El.'; // Eliminated/Éliminé
+                            $result['grundf'] = 999;
+                            $result['grundt'] = 999;
+                            $result['tfg'] = null;
+                            $result['re'] = $eliminatedRank;
+                        } elseif ($statusText == 'disqualified') {
+                            $result['or'] = 'S'; // Disqualified/Disqualifié
+                            $result['result_preview'] = 'Dsq.'; // Disqualified/Disqualifié
+                            $result['grundf'] = 999;
+                            $result['grundt'] = 999;
+                            $result['tfg'] = null;
+                            $result['re'] = $eliminatedRank;
+                        } elseif ($statusText == 'withdrawn') {
+                            // Si withdrawn dans un round spécifique (pas le premier)
+                            if ($roundName == 'jump-off' || strpos($roundName, 'round 2') !== false || strpos($roundName, 'phase 2') !== false) {
+                                // Non partant au jump-off/round 2 : mettre 999 pour les fautes et temps
+                                $result['omh1f'] = 999;
+                                $result['omh1t'] = 999;
+                                $result['totfel'] = 999;
+                                $result['result_preview'] = '0-ABST'; // Format pour 2 rounds
+                            } elseif (strpos($roundName, 'round 3') !== false || strpos($roundName, 'phase 3') !== false) {
+                                // Non partant au round 3
+                                $result['omh2f'] = 999;
+                                $result['omh2t'] = 999;
+                                $result['totfel'] = 999;
+                                $result['result_preview'] = '0-0-ABST'; // Format pour 3 rounds
+                            } elseif (strpos($roundName, 'round 4') !== false || strpos($roundName, 'phase 4') !== false) {
+                                // Non partant au round 4
+                                $result['omg3f'] = 999;
+                                $result['omg3t'] = 999;
+                                $result['totfel'] = 999;
+                                $result['result_preview'] = '0-0-0-ABST'; // Format pour 4 rounds
+                            } elseif (strpos($roundName, 'round 5') !== false || strpos($roundName, 'phase 5') !== false) {
+                                // Non partant au round 5
+                                $result['omg4f'] = 999;
+                                $result['omg4t'] = 999;
+                                $result['totfel'] = 999;
+                                $result['result_preview'] = '0-0-0-0-ABST'; // Format pour 5 rounds
+                            } else {
+                                // Withdrawn général (premier round)
+                                $result['a'] = 'Ö'; // Withdrawn/Forfait
+                                $result['grundf'] = 999;
+                                $result['grundt'] = 999;
+                                $result['tfg'] = null;
+                                $result['result_preview'] = 'Ret.'; // Format pour 1 round
                             }
+                        } elseif ($statusText == 'no show') {
+                            $result['a'] = 'U'; // No-show/Non-partant
+                            $result['grundf'] = 999;
+                            $result['grundt'] = 999;
+                            $result['tfg'] = null;
+                            $result['result_preview'] = 'NS'; // No Show
+                        }
+                    }
+
+                    // Vérifier aussi si pas de résultats du tout (non-partant)
+                    if (!isset($resultDetails[0]) || count($resultDetails) == 0) {
+                        // Pas de résultats du tout
+                        if (!isset($result['or']) && !isset($result['a'])) {
+                            // Si on n'a pas déjà défini un statut, considérer comme non-partant
+                            $result['a'] = 'U'; // No-show/Non-partant
+                            $result['grundf'] = 999;
+                            $result['grundt'] = 999;
+                            $result['tfg'] = null;
+                            $result['result_preview'] = 'NS'; // No Show
+                        }
+                    }
+
+                    // Vérifier aussi si pas de résultats du tout (non-partant)
+                    if (!isset($resultDetails[0]) || count($resultDetails) == 0) {
+                        // Pas de résultats du tout
+                        if (!isset($result['or']) && !isset($result['a'])) {
+                            // Si on n'a pas déjà défini un statut, considérer comme non-partant
+                            $result['a'] = 'U'; // No-show/Non-partant
                         }
                     }
                     
