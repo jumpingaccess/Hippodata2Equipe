@@ -304,7 +304,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                     $startlistsToProcess[] = [
                         'foreign_id' => $classData['ID'],
                         'class_id' => $classData['NR'] ?? $classData['ID'],
-                        'name' => !empty($classData['NAME']) ? $classData['NAME'] : $classData['SPONSOR']
+                        'name' => !empty($classData['NAME']) ? $classData['NAME'] : $classData['SPONSOR'],
+                        'is_team' => $selection['team_class'] // Ajouter cette ligne si manquante
                     ];
                 }
                 
@@ -460,12 +461,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
             curl_close($ch);
             
-            // Si people.json existe et retourne 200
             if ($httpCode === 200 && $response) {
                 $people = json_decode($response, true);
                 if (is_array($people)) {
                     foreach ($people as $person) {
-                        // Stocker par foreign_id et par fei_id
                         if (isset($person['foreign_id'])) {
                             $existingPeople[$person['foreign_id']] = $person;
                         }
@@ -491,12 +490,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
             curl_close($ch);
             
-            // Si horses.json existe et retourne 200
             if ($httpCode === 200 && $response) {
                 $horses = json_decode($response, true);
                 if (is_array($horses)) {
                     foreach ($horses as $horse) {
-                        // Stocker par foreign_id et par fei_id
                         if (isset($horse['foreign_id'])) {
                             $existingHorses[$horse['foreign_id']] = $horse;
                         }
@@ -510,16 +507,103 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                 error_log("Found " . count($existingHorses) . " existing horses");
             }
             
+            // 3. Récupérer la liste des clubs existants dans Equipe (pour les équipes)
+            $existingClubs = [];
+            
+            $ch = curl_init($meetingUrl . '/clubs.json');
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_HTTPHEADER, ["X-Api-Key: {$apiKey}", "Accept: application/json"]);
+            curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+            $response = curl_exec($ch);
+            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            curl_close($ch);
+            
+            if ($httpCode === 200 && $response) {
+                $clubs = json_decode($response, true);
+                if (is_array($clubs)) {
+                    foreach ($clubs as $club) {
+                        if (isset($club['foreign_id'])) {
+                            $existingClubs[$club['foreign_id']] = $club;
+                        }
+                    }
+                }
+            }
+            
+            // Mapper les codes IOC vers les noms de pays en anglais
+            $countryNames = [
+                'GER' => 'Germany',
+                'FRA' => 'France',
+                'GBR' => 'Great Britain',
+                'USA' => 'United States',
+                'NED' => 'Netherlands',
+                'BEL' => 'Belgium',
+                'SUI' => 'Switzerland',
+                'SWE' => 'Sweden',
+                'ITA' => 'Italy',
+                'ESP' => 'Spain',
+                'AUT' => 'Austria',
+                'IRL' => 'Ireland',
+                'CAN' => 'Canada',
+                'AUS' => 'Australia',
+                'NZL' => 'New Zealand',
+                'JPN' => 'Japan',
+                'BRA' => 'Brazil',
+                'ARG' => 'Argentina',
+                'CHI' => 'Chile',
+                'MEX' => 'Mexico',
+                'NOR' => 'Norway',
+                'DEN' => 'Denmark',
+                'FIN' => 'Finland',
+                'POL' => 'Poland',
+                'CZE' => 'Czech Republic',
+                'HUN' => 'Hungary',
+                'POR' => 'Portugal',
+                'RUS' => 'Russia',
+                'UKR' => 'Ukraine',
+                'RSA' => 'South Africa',
+                'UAE' => 'United Arab Emirates',
+                'KSA' => 'Saudi Arabia',
+                'QAT' => 'Qatar',
+                'HKG' => 'Hong Kong',
+                'SGP' => 'Singapore',
+                'IND' => 'India',
+                'COL' => 'Colombia',
+                'VEN' => 'Venezuela',
+                'URY' => 'Uruguay',
+                'ECU' => 'Ecuador',
+                'ISR' => 'Israel',
+                'TUR' => 'Turkey',
+                'GRE' => 'Greece',
+                'EGY' => 'Egypt',
+                'MAR' => 'Morocco',
+                'KOR' => 'South Korea',
+                'TPE' => 'Chinese Taipei',
+                'LUX' => 'Luxembourg',
+                'EST' => 'Estonia',
+                'LAT' => 'Latvia',
+                'LTU' => 'Lithuania',
+                'SVK' => 'Slovakia',
+                'SLO' => 'Slovenia',
+                'CRO' => 'Croatia',
+                'BUL' => 'Bulgaria',
+                'ROU' => 'Romania'
+            ];
+            
             $allBatchData = [];
             $processedCompetitions = [];
             
-            // 3. Pour chaque compétition, récupérer la startlist
+            // 4. Pour chaque compétition, récupérer la startlist
             foreach ($competitions as $comp) {
                 $classId = $comp['class_id'];
                 $competitionForeignId = $comp['foreign_id'];
-                
+                $isTeamCompetition = isset($comp['is_team']) && $comp['is_team'];
+                // Après avoir récupéré $isTeamCompetition
                 if ($debugMode) {
-                    error_log("Processing competition: " . $comp['name'] . " (class_id: " . $classId . ")");
+                    error_log("Competition " . $comp['name'] . " - is_team from frontend: " . ($isTeamCompetition ? 'yes' : 'no'));
+                    error_log("Competition data: " . json_encode($comp));
+                }
+                if ($debugMode) {
+                    error_log("Processing competition: " . $comp['name'] . " (class_id: " . $classId . ", is_team: " . ($isTeamCompetition ? 'yes' : 'no') . ")");
                 }
                 
                 // Récupérer la startlist depuis Hippodata
@@ -548,6 +632,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                         'people_count' => 0,
                         'horses_count' => 0,
                         'starts_count' => 0,
+                        'teams_count' => 0,
+                        'is_team' => $isTeamCompetition,
                         'error' => "Failed to fetch startlist (HTTP $httpCode)"
                     ];
                     continue;
@@ -565,6 +651,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                         'people_count' => 0,
                         'horses_count' => 0,
                         'starts_count' => 0,
+                        'teams_count' => 0,
+                        'is_team' => $isTeamCompetition,
                         'error' => "No competitors in startlist"
                     ];
                     continue;
@@ -572,6 +660,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                 
                 $newPeople = [];
                 $newHorses = [];
+                $newClubs = [];
+                $newTeams = [];
                 $starts = [];
                 
                 // Traiter chaque concurrent
@@ -579,18 +669,91 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                 
                 // S'assurer que c'est un tableau d'arrays
                 if (isset($competitors['RIDER'])) {
-                    // Un seul concurrent, le mettre dans un tableau
                     $competitors = [$competitors];
                 }
                 
+                // Si c'est une compétition par équipe, analyser d'abord les nations
+                $competitorsByNation = [];
+                $teamsByNation = [];
+                $teamCounter = 1;
+                
+                if ($isTeamCompetition) {
+                    // D'abord, compter les cavaliers par nation
+                    foreach ($competitors as $competitor) {
+                        $rider = $competitor['RIDER'] ?? [];
+                        $nation = $rider['NATION'] ?? '';
+                        $club = $rider['CLUB'] ?? '';
+                        
+                        if ($nation) {
+                            if (!isset($competitorsByNation[$nation])) {
+                                $competitorsByNation[$nation] = [
+                                    'competitors' => [],
+                                    'club_name' => $club ?: $nation
+                                ];
+                            }
+                            $competitorsByNation[$nation]['competitors'][] = $competitor;
+                        }
+                    }
+                    
+                    // Créer les équipes seulement pour les nations avec 3+ cavaliers
+                    foreach ($competitorsByNation as $nation => $data) {
+                        if (count($data['competitors']) >= 3) {
+                            $clubForeignId = 'club_' . $nation;
+                            $teamForeignId = 'team_' . $competitionForeignId . '_' . $nation;
+                            
+                            // Déterminer le nom du club
+                            $clubName = $data['club_name'];
+                            if (isset($countryNames[$nation])) {
+                                $clubName = $countryNames[$nation] . ' Team';
+                            } elseif ($data['club_name'] && $data['club_name'] !== $nation) {
+                                $clubName = $data['club_name'];
+                            } else {
+                                $clubName = $nation . ' Team';
+                            }
+                            
+                            // Ajouter le club s'il n'existe pas
+                            if (!isset($existingClubs[$clubForeignId]) && !isset($newClubs[$clubForeignId])) {
+                                $newClubs[$clubForeignId] = [
+                                    'foreign_id' => $clubForeignId,
+                                    'name' => $clubName,
+                                    'logo_id' => $nation,
+                                    'logo_group' => 'flags48'
+                                ];
+                            }
+                            
+                            // Créer l'équipe
+                            $teamsByNation[$nation] = [
+                                'foreign_id' => $teamForeignId,
+                                'st' => $teamCounter,
+                                'ord' => $teamCounter,
+                                'lagnr' => $teamCounter,
+                                'lagledare' => '',
+                                'club' => ['foreign_id' => $clubForeignId]
+                            ];
+                            
+                            $newTeams[] = $teamsByNation[$nation];
+                            $teamCounter++;
+                            
+                            if ($debugMode) {
+                                error_log("Created team for " . $nation . " with " . count($data['competitors']) . " riders");
+                            }
+                        } else {
+                            if ($debugMode) {
+                                error_log("Nation " . $nation . " has only " . count($data['competitors']) . " riders, no team created");
+                            }
+                        }
+                    }
+                }
+                
+                // Traiter chaque concurrent
                 foreach ($competitors as $competitor) {
                     $rider = $competitor['RIDER'] ?? [];
                     $horse = $competitor['HORSE'] ?? [];
+                    $nation = $rider['NATION'] ?? '';
                     
                     // Vérifier et préparer les données du cavalier
                     $riderFeiId = $rider['RFEI_ID'] ?? null;
                     if ($riderFeiId && !isset($existingPeople[$riderFeiId]) && !isset($existingPeopleFeiIds[$riderFeiId])) {
-                        // Parser le nom
                         $nameParts = explode(',', $rider['RNAME'] ?? '');
                         $lastName = trim($nameParts[0] ?? '');
                         $firstName = trim($nameParts[1] ?? '');
@@ -599,11 +762,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                             'foreign_id' => $riderFeiId,
                             'first_name' => $firstName,
                             'last_name' => $lastName,
-                            'country' => $rider['NATION'] ?? '',
+                            'country' => $nation,
                             'fei_id' => $riderFeiId
                         ];
                         
-                        // Marquer comme existant pour éviter les doublons dans ce batch
                         $existingPeople[$riderFeiId] = true;
                         $existingPeopleFeiIds[$riderFeiId] = true;
                     }
@@ -613,12 +775,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                     if ($horseFeiId && !isset($existingHorses[$horseFeiId]) && !isset($existingHorsesFeiIds[$horseFeiId])) {
                         $horseInfo = $horse['HORSEINFO'] ?? [];
                         
-                        // Mapper le sexe
                         $gender = strtolower($horseInfo['GENDER'] ?? '');
                         $sexMap = [
-                            'm' => 'val', // Male/Stallion
-                            'g' => 'val', // Gelding
-                            'f' => 'sto', // Female/Mare
+                            'm' => 'val',
+                            'g' => 'val',
+                            'f' => 'sto',
                             'mare' => 'sto',
                             'stallion' => 'hin',
                             'gelding' => 'val'
@@ -636,7 +797,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                             'fei_id' => $horseFeiId
                         ];
                         
-                        // Marquer comme existant pour éviter les doublons dans ce batch
                         $existingHorses[$horseFeiId] = true;
                         $existingHorsesFeiIds[$horseFeiId] = true;
                     }
@@ -644,22 +804,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                     // Préparer la start entry
                     if ($riderFeiId && $horseFeiId) {
                         $sortOrder = $competitor['SORTROUND']['ROUND1'] ?? $competitor['SORTORDER'] ?? 0;
-                        $starts[] = [
-                            'foreign_id' => $riderFeiId . '_' . $horseFeiId . '_' . $competitionForeignId,
-                            'st' => (string)$sortOrder,
-                            'ord' => (int)$sortOrder,
-                            'rider' => [
-                                'foreign_id' => $riderFeiId
-                            ],
-                            'horse' => [
-                                'foreign_id' => $horseFeiId
-                            ]
-                        ];
+                        
+                        if ($isTeamCompetition && $nation && isset($teamsByNation[$nation])) {
+                            // Start entry pour compétition par équipe (seulement si l'équipe existe)
+                            $starts[] = [
+                                'foreign_id' => $riderFeiId . '_' . $horseFeiId . '_' . $competitionForeignId,
+                                'st' => (string)$sortOrder,
+                                'ord' => (int)$sortOrder,
+                                'category' => 'H',
+                                'section' => 'A',
+                                'rider' => ['foreign_id' => $riderFeiId],
+                                'horse' => ['foreign_id' => $horseFeiId],
+                                'team' => ['foreign_id' => $teamsByNation[$nation]['foreign_id']],
+                                'club' => ['foreign_id' => 'club_' . $nation]
+                            ];
+                        } else {
+                            // Start entry normale (pas d'équipe ou nation avec moins de 3 cavaliers)
+                            $starts[] = [
+                                'foreign_id' => $riderFeiId . '_' . $horseFeiId . '_' . $competitionForeignId,
+                                'st' => (string)$sortOrder,
+                                'ord' => (int)$sortOrder,
+                                'rider' => ['foreign_id' => $riderFeiId],
+                                'horse' => ['foreign_id' => $horseFeiId]
+                            ];
+                        }
                     }
                 }
                 
                 if ($debugMode) {
-                    error_log("Competition " . $comp['name'] . ": " . count($newPeople) . " new people, " . count($newHorses) . " new horses, " . count($starts) . " starts");
+                    error_log("Competition " . $comp['name'] . ": " . count($newPeople) . " new people, " . 
+                            count($newHorses) . " new horses, " . count($starts) . " starts" .
+                            ($isTeamCompetition ? ", " . count($newTeams) . " teams" : ""));
                 }
                 
                 // Préparer le batch data pour cette compétition
@@ -679,17 +854,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                     ];
                 }
                 
+                if ($isTeamCompetition) {
+                    if (!empty($newClubs)) {
+                        $batchData['clubs'] = [
+                            'unique_by' => 'foreign_id',
+                            'records' => array_values($newClubs)
+                        ];
+                    }
+                    
+                    if (!empty($newTeams)) {
+                        $batchData['teams'] = [
+                            'unique_by' => 'foreign_id',
+                            'where' => [
+                                'competition' => ['foreign_id' => $competitionForeignId]
+                            ],
+                            'records' => $newTeams
+                        ];
+                    }
+                }
+                
                 if (!empty($starts)) {
                     $batchData['starts'] = [
                         'unique_by' => 'foreign_id',
                         'where' => [
-                            'competition' => [
-                                'foreign_id' => $competitionForeignId
-                            ]
+                            'competition' => ['foreign_id' => $competitionForeignId]
                         ],
-                        'abort_if_any' => [
-                            'rid' => true
-                        ],
+                        'abort_if_any' => ['rid' => true],
                         'replace' => true,
                         'records' => $starts
                     ];
@@ -699,11 +889,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                     $allBatchData[] = [
                         'competition' => $comp['name'],
                         'competition_foreign_id' => $competitionForeignId,
+                        'is_team' => $isTeamCompetition,
                         'data' => $batchData,
                         'details' => [
                             'people' => $newPeople,
                             'horses' => $newHorses,
-                            'starts' => $starts
+                            'starts' => $starts,
+                            'teams' => $newTeams
                         ]
                     ];
                 }
@@ -714,12 +906,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                     'people_count' => count($newPeople),
                     'horses_count' => count($newHorses),
                     'starts_count' => count($starts),
+                    'teams_count' => count($newTeams),
+                    'is_team' => $isTeamCompetition,
                     'people' => array_map(function($p) {
                         return $p['first_name'] . ' ' . $p['last_name'] . ' (' . $p['country'] . ')';
                     }, $newPeople),
                     'horses' => array_map(function($h) {
                         return $h['name'] . ' - ' . $h['fei_id'];
-                    }, $newHorses)
+                    }, $newHorses),
+                    'teams' => array_map(function($t) use ($countryNames) {
+                        $nation = str_replace('club_', '', $t['club']['foreign_id']);
+                        $teamName = isset($countryNames[$nation]) ? $countryNames[$nation] : $nation;
+                        return 'Team ' . $t['lagnr'] . ' - ' . $teamName;
+                    }, $newTeams)
                 ];
             }
             
@@ -742,7 +941,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         }
         exit;
     }
-    
+        
     // Action pour importer les résultats
     if ($_POST['action'] === 'import_results') {
         if ($debugMode) {
@@ -773,9 +972,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             foreach ($competitions as $comp) {
                 $classId = $comp['class_id'];
                 $competitionForeignId = $comp['foreign_id'];
+                $isTeamCompetition = isset($comp['is_team']) && $comp['is_team'];
                 
                 if ($debugMode) {
-                    error_log("Processing results for competition: " . $comp['name'] . " (class_id: " . $classId . ")");
+                    error_log("Processing results for competition: " . $comp['name'] . " (class_id: " . $classId . ", is_team: " . ($isTeamCompetition ? 'yes' : 'no') . ")");
                 }
                 
                 // Récupérer les résultats depuis Hippodata
@@ -830,7 +1030,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                 if (isset($resultsData['CLASS']['TIME2_ALLOWED'])) {
                     $competitionUpdate['omh1t'] = (int)$resultsData['CLASS']['TIME2_ALLOWED'];
                 }
-                // Ajouter d'autres temps autorisés si disponibles dans l'API
                 if (isset($resultsData['CLASS']['TIME3_ALLOWED'])) {
                     $competitionUpdate['omh2t'] = (int)$resultsData['CLASS']['TIME3_ALLOWED'];
                 }
@@ -840,8 +1039,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                 if (isset($resultsData['CLASS']['TIME5_ALLOWED'])) {
                     $competitionUpdate['omg4t'] = (int)$resultsData['CLASS']['TIME5_ALLOWED'];
                 }
-                if (isset($resultsData['CLASS']['TIME6_ALLOWED'])) {
-                    $competitionUpdate['omg5t'] = (int)$resultsData['CLASS']['TIME6_ALLOWED'];
+                
+                // Si c'est une compétition par équipe, ajouter le flag
+                if ($isTeamCompetition) {
+                    $competitionUpdate['team'] = true;
                 }
                 
                 $results = [];
@@ -851,20 +1052,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                 
                 // S'assurer que c'est un tableau d'arrays
                 if (isset($competitors['RIDER'])) {
-                    // Un seul concurrent, le mettre dans un tableau
                     $competitors = [$competitors];
                 }
+                
+                // Trouver le rang des éliminés/retirés
                 $eliminatedRank = null;
                 foreach ($competitors as $compet) {
                     $compResultTotal = $compet['RESULTTOTAL'][0] ?? [];
                     if (isset($compResultTotal['STATUS']) && $compResultTotal['STATUS'] != 1) {
                         $compStatusText = strtolower($compResultTotal['TEXT'] ?? '');
-                        if (($compStatusText == 'eliminated' || $compStatusText == 'retired' ) && isset($compResultTotal['RANK'])) {
+                        if (($compStatusText == 'eliminated' || $compStatusText == 'retired') && isset($compResultTotal['RANK'])) {
                             $eliminatedRank = (int)$compResultTotal['RANK'];
                             break;
                         }
                     }
                 }
+                
                 foreach ($competitors as $competitor) {
                     $rider = $competitor['RIDER'] ?? [];
                     $horse = $competitor['HORSE'] ?? [];
@@ -873,7 +1076,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                     $horseFeiId = $horse['HFEI_ID'] ?? null;
                     
                     if (!$riderFeiId || !$horseFeiId) {
-                        continue; // Skip si pas d'identifiants
+                        continue;
                     }
 
                     // Préparer le résultat
@@ -883,7 +1086,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                         'horse' => ['foreign_id' => $horseFeiId],
                         'rid' => true,
                         'result_at' => date('Y-m-d H:i:s'),
-                        'last_result_at' => date('Y-m-d H:i:s')
+                        'last_result_at' => date('Y-m-d H:i:s'),
+                        'k' => 'H',
+                        'av' => 'A'
                     ];
                     
                     // Traiter les résultats par round
@@ -892,7 +1097,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                     
                     // Initialiser les valeurs par défaut
                     $result['ord'] = (int)($competitor['SORTORDER'] ?? 1000);
-                    //$result['st'] = (string)($competitor['SORTORDER'] ?? '1');
                     
                     // Mapper les résultats selon les rounds
                     foreach ($resultDetails as $roundResult) {
@@ -902,197 +1106,198 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                         $timeFaults = (float)($roundResult['TIMEFAULTS'] ?? 0);
                         
                         switch ($round) {
-                            case 1: // Round 1
+                            case 1:
                                 $result['grundf'] = $faults;
                                 $result['grundt'] = $time;
                                 $result['tfg'] = $timeFaults;
-                                // Si c'est une compétition par équipe, on peut ajouter round1_in_team
-                                if (isset($roundResult['IN_TEAM'])) {
-                                    $result['round1_in_team'] = (float)$roundResult['IN_TEAM'];
-                                }
                                 break;
-                                
-                            case 2: // Round 2 (Jump-off ou 2ème manche)
+                            case 2:
                                 $result['omh1f'] = $faults;
                                 $result['omh1t'] = $time;
                                 $result['tf1'] = $timeFaults;
-                                if (isset($roundResult['IN_TEAM'])) {
-                                    $result['round2_in_team'] = (float)$roundResult['IN_TEAM'];
-                                }
                                 break;
-                                
-                            case 3: // Round 3
+                            case 3:
                                 $result['omh2f'] = $faults;
                                 $result['omh2t'] = $time;
                                 $result['tf2'] = $timeFaults;
-                                if (isset($roundResult['IN_TEAM'])) {
-                                    $result['round3_in_team'] = (float)$roundResult['IN_TEAM'];
-                                }
                                 break;
-                                
-                            case 4: // Round 4
+                            case 4:
                                 $result['omg3f'] = $faults;
                                 $result['omg3t'] = $time;
                                 $result['tf3'] = $timeFaults;
-                                if (isset($roundResult['IN_TEAM'])) {
-                                    $result['round4_in_team'] = (float)$roundResult['IN_TEAM'];
-                                }
                                 break;
-                                
-                            case 5: // Round 5
+                            case 5:
                                 $result['omg4f'] = $faults;
                                 $result['omg4t'] = $time;
                                 $result['tf4'] = $timeFaults;
-                                if (isset($roundResult['IN_TEAM'])) {
-                                    $result['round5_in_team'] = (float)$roundResult['IN_TEAM'];
-                                }
                                 break;
-                                
-                            case 6: // Round 6
-                                $result['omg5f'] = $faults;
-                                $result['omg5t'] = $time;
-                                $result['tf5'] = $timeFaults;
-                                if (isset($roundResult['IN_TEAM'])) {
-                                    $result['round6_in_team'] = (float)$roundResult['IN_TEAM'];
-                                }
-                                break;
-                        }
-                    }
-                    
-                    // Ajouter le rang et les prix
-                    if (isset($resultTotal['RANK'])) {
-                        $result['re'] = (int)$resultTotal['RANK'];
-                    }
-                    
-                    if (isset($resultTotal['PRIZE']['MONEY'])) {
-                        $result['premie'] = (float)$resultTotal['PRIZE']['MONEY'];
-                        $result['premie_show'] = (float)$resultTotal['PRIZE']['MONEY'];
-                    }
-                    
-                    // Traiter les prix en nature
-                    if (isset($resultTotal['PRIZE']['TEXT']) && !isset($resultTotal['PRIZE']['MONEY'])) {
-                        // Si on a un texte de prix mais pas de montant, c'est peut-être un prix en nature
-                        $result['rtxt'] = $resultTotal['PRIZE']['TEXT'];
-                        $result['premie'] = 0;
-                        $result['premie_show'] = 0;
-                    }
-                    
-                    // Traiter les états spéciaux (retraité, éliminé, disqualifié)
-                    $status = $resultTotal['STATUS'] ?? 1;
-                    $state = $competitor['STATE'] ?? 0;
-                    
-                    // Vérifier si le cavalier a été éliminé, retraité, etc.
-                    // En se basant sur le STATUS et d'autres indicateurs
-                    // Traiter les états spéciaux (retraité, éliminé, disqualifié)
-                    // Traiter les états spéciaux (retraité, éliminé, disqualifié)
-                    if (isset($resultTotal['STATUS']) && $resultTotal['STATUS'] != 1) {
-                        // Le cavalier a un statut spécial
-                        $statusText = strtolower($resultTotal['TEXT'] ?? '');
-                        $roundName = strtolower($resultTotal['NAME'] ?? '');
-
-                        // Mapper les statuts basés sur le texte
-                        if ($statusText == 'retired') {
-                            $result['or'] = 'U'; // Retired/Abandonné
-                            $result['result_preview'] = 'Ret.'; // Retired/Abandonné
-                            $result['grundf'] = 999;
-                            $result['grundt'] = 999;
-                            $result['tfg'] = null;
-                            $result['re'] = $eliminatedRank;
-                        } elseif ($statusText == 'eliminated') {
-                            $result['or'] = 'D'; // Eliminated/Éliminé
-                            $result['result_preview'] = 'El.'; // Eliminated/Éliminé
-                            $result['grundf'] = 999;
-                            $result['grundt'] = 999;
-                            $result['tfg'] = null;
-                            $result['re'] = $eliminatedRank;
-                        } elseif ($statusText == 'disqualified') {
-                            $result['or'] = 'S'; // Disqualified/Disqualifié
-                            $result['result_preview'] = 'Dsq.'; // Disqualified/Disqualifié
-                            $result['grundf'] = 999;
-                            $result['grundt'] = 999;
-                            $result['tfg'] = null;
-                            $result['re'] = $eliminatedRank;
-                        } elseif ($statusText == 'withdrawn') {
-                            // Si withdrawn dans un round spécifique (pas le premier)
-                            if ($roundName == 'jump-off' || strpos($roundName, 'round 2') !== false || strpos($roundName, 'phase 2') !== false) {
-                                // Non partant au jump-off/round 2 : mettre 999 pour les fautes et temps
-                                $result['omh1f'] = 999;
-                                $result['omh1t'] = 999;
-                                $result['totfel'] = 999;
-                                $result['result_preview'] = '0-ABST'; // Format pour 2 rounds
-                            } elseif (strpos($roundName, 'round 3') !== false || strpos($roundName, 'phase 3') !== false) {
-                                // Non partant au round 3
-                                $result['omh2f'] = 999;
-                                $result['omh2t'] = 999;
-                                $result['totfel'] = 999;
-                                $result['result_preview'] = '0-0-ABST'; // Format pour 3 rounds
-                            } elseif (strpos($roundName, 'round 4') !== false || strpos($roundName, 'phase 4') !== false) {
-                                // Non partant au round 4
-                                $result['omg3f'] = 999;
-                                $result['omg3t'] = 999;
-                                $result['totfel'] = 999;
-                                $result['result_preview'] = '0-0-0-ABST'; // Format pour 4 rounds
-                            } elseif (strpos($roundName, 'round 5') !== false || strpos($roundName, 'phase 5') !== false) {
-                                // Non partant au round 5
-                                $result['omg4f'] = 999;
-                                $result['omg4t'] = 999;
-                                $result['totfel'] = 999;
-                                $result['result_preview'] = '0-0-0-0-ABST'; // Format pour 5 rounds
-                            } else {
-                                // Withdrawn général (premier round)
-                                $result['a'] = 'Ö'; // Withdrawn/Forfait
-                                $result['grundf'] = 999;
-                                $result['grundt'] = 999;
-                                $result['tfg'] = null;
-                                $result['result_preview'] = 'Ret.'; // Format pour 1 round
-                            }
-                        } elseif ($statusText == 'no show') {
-                            $result['a'] = 'U'; // No-show/Non-partant
-                            $result['grundf'] = 999;
-                            $result['grundt'] = 999;
-                            $result['tfg'] = null;
-                            $result['result_preview'] = 'NS'; // No Show
-                        }
-                    }
-
-                    // Vérifier aussi si pas de résultats du tout (non-partant)
-                    if (!isset($resultDetails[0]) || count($resultDetails) == 0) {
-                        // Pas de résultats du tout
-                        if (!isset($result['or']) && !isset($result['a'])) {
-                            // Si on n'a pas déjà défini un statut, considérer comme non-partant
-                            $result['a'] = 'U'; // No-show/Non-partant
-                            $result['grundf'] = 999;
-                            $result['grundt'] = 999;
-                            $result['tfg'] = null;
-                            $result['result_preview'] = 'NS'; // No Show
-                        }
-                    }
-
-                    // Vérifier aussi si pas de résultats du tout (non-partant)
-                    if (!isset($resultDetails[0]) || count($resultDetails) == 0) {
-                        // Pas de résultats du tout
-                        if (!isset($result['or']) && !isset($result['a'])) {
-                            // Si on n'a pas déjà défini un statut, considérer comme non-partant
-                            $result['a'] = 'U'; // No-show/Non-partant
-                        }
-                    }
-                    
-                    // Vérifier les non-partants
-                    if (!isset($resultDetails[0]) || count($resultDetails) == 0) {
-                        // Pas de résultats du tout, peut-être non-partant
-                        if ($state == 1) {
-                            $result['a'] = 'Ö'; // Withdrawn/Forfait
-                        } elseif ($state == 2) {
-                            $result['a'] = 'U'; // No-show/Non-partant
                         }
                     }
                     
                     // Total des fautes
                     $result['totfel'] = (float)($resultTotal['FAULTS'] ?? 0);
                     
-                    // Ajouter des valeurs par défaut pour les champs manquants
-                    $result['k'] = 'H'; // Type: H pour Horse
-                    $result['av'] = 'A'; // Valeur par défaut
+                    // Traiter d'abord les états spéciaux (eliminated, retired, etc.)
+                    $hasSpecialStatus = false;
+                    if (isset($resultTotal['STATUS']) && $resultTotal['STATUS'] != 1) {
+                        $statusText = strtolower($resultTotal['TEXT'] ?? '');
+                        $roundName = strtolower($resultTotal['NAME'] ?? '');
+                        $hasSpecialStatus = true;
+
+                        if ($statusText == 'retired') {
+                            $result['or'] = 'U';
+                            $result['result_preview'] = 'Ret.';
+                            $result['grundf'] = 999;
+                            $result['grundt'] = 999;
+                            $result['tfg'] = null;
+                            $result['re'] = $eliminatedRank;
+                        } elseif ($statusText == 'eliminated') {
+                            $result['or'] = 'D';
+                            $result['result_preview'] = 'El.';
+                            $result['grundf'] = 999;
+                            $result['grundt'] = 999;
+                            $result['tfg'] = null;
+                            $result['re'] = $eliminatedRank;
+                        } elseif ($statusText == 'disqualified') {
+                            $result['or'] = 'S';
+                            $result['result_preview'] = 'Dsq.';
+                            $result['grundf'] = 999;
+                            $result['grundt'] = 999;
+                            $result['tfg'] = null;
+                            $result['re'] = $eliminatedRank;
+                        } elseif ($statusText == 'withdrawn') {
+                            if ($roundName == 'jump-off' || strpos($roundName, 'round 2') !== false || strpos($roundName, 'phase 2') !== false) {
+                                $result['omh1f'] = 999;
+                                $result['omh1t'] = 999;
+                                $result['totfel'] = 999;
+                                $result['result_preview'] = '0-ABST';
+                            } elseif (strpos($roundName, 'round 3') !== false || strpos($roundName, 'phase 3') !== false) {
+                                $result['omh2f'] = 999;
+                                $result['omh2t'] = 999;
+                                $result['totfel'] = 999;
+                                $result['result_preview'] = '0-0-ABST';
+                            } elseif (strpos($roundName, 'round 4') !== false || strpos($roundName, 'phase 4') !== false) {
+                                $result['omg3f'] = 999;
+                                $result['omg3t'] = 999;
+                                $result['totfel'] = 999;
+                                $result['result_preview'] = '0-0-0-ABST';
+                            } elseif (strpos($roundName, 'round 5') !== false || strpos($roundName, 'phase 5') !== false) {
+                                $result['omg4f'] = 999;
+                                $result['omg4t'] = 999;
+                                $result['totfel'] = 999;
+                                $result['result_preview'] = '0-0-0-0-ABST';
+                            } else {
+                                $result['a'] = 'Ö';
+                                $result['grundf'] = 999;
+                                $result['grundt'] = 999;
+                                $result['tfg'] = null;
+                                $result['result_preview'] = 'ABST';
+                            }
+                        } elseif ($statusText == 'no show') {
+                            $result['a'] = 'U';
+                            $result['grundf'] = 999;
+                            $result['grundt'] = 999;
+                            $result['tfg'] = null;
+                            $result['result_preview'] = 'NS';
+                        }
+                    }
+                    
+                    // Gérer les flags in_team pour les compétitions par équipe
+                    if ($isTeamCompetition) {
+                        // Déterminer quels rounds ont été complétés
+                        $roundsData = [];
+                        foreach ($resultDetails as $roundResult) {
+                            $round = $roundResult['ROUND'] ?? 0;
+                            if ($round > 0) {
+                                $roundsData[$round] = true;
+                            }
+                        }
+                        
+                        // Round 1
+                        if (isset($result['grundf']) && $result['grundf'] != 999) {
+                            $result['round1_in_team'] = true;
+                        } else {
+                            $result['round1_in_team'] = false;
+                        }
+                        
+                        // Si le cavalier n'a pas de statut spécial (eliminated, retired, etc.)
+                        if (!$hasSpecialStatus || ($hasSpecialStatus && $statusText == 'withdrawn')) {
+                            // Round 2
+                            if (isset($roundsData[1]) && !isset($roundsData[2]) && !$hasSpecialStatus) {
+                                // Abstained au round 2
+                                $result['omh1f'] = 999;
+                                $result['omh1t'] = 999;
+                                $result['round2_in_team'] = true;
+                                $result['or'] = 'A';
+                                
+                                if (!isset($result['totfel']) || $result['totfel'] < 999) {
+                                    $result['totfel'] = 999;
+                                }
+                                
+                                $result['result_preview'] = (string)($result['grundf'] ?? 0) . '-ABST';
+                            } elseif (isset($roundsData[2])) {
+                                $result['round2_in_team'] = true;
+                            } else {
+                                $result['round2_in_team'] = false;
+                            }
+                            
+                            // Round 3
+                            if (isset($roundsData[1]) && isset($roundsData[2]) && !isset($roundsData[3]) && !$hasSpecialStatus) {
+                                // Abstained au round 3
+                                $result['omh2f'] = 999;
+                                $result['omh2t'] = 999;
+                                $result['round3_in_team'] = true;
+                                $result['or'] = 'A';
+                                
+                                if (!isset($result['totfel']) || $result['totfel'] < 999) {
+                                    $result['totfel'] = 999;
+                                }
+                                
+                                $result['result_preview'] = (string)($result['grundf'] ?? 0) . '-' . (string)($result['omh1f'] ?? 0) . '-ABST';
+                            } elseif (isset($roundsData[3])) {
+                                $result['round3_in_team'] = true;
+                            } else {
+                                $result['round3_in_team'] = false;
+                            }
+                            
+                            // Rounds 4 et 5 suivent la même logique...
+                        } else {
+                            // Si éliminé/retiré/disqualifié, pas de flags in_team pour les rounds suivants
+                            $result['round2_in_team'] = false;
+                            $result['round3_in_team'] = false;
+                            $result['round4_in_team'] = false;
+                            $result['round5_in_team'] = false;
+                        }
+                    }
+                    
+                    // Ajouter le rang si pas déjà défini
+                    if (!isset($result['re']) && isset($resultTotal['RANK'])) {
+                        $result['re'] = (int)$resultTotal['RANK'];
+                    }
+                    
+                    // Prix
+                    if (isset($resultTotal['PRIZE']['MONEY'])) {
+                        $result['premie'] = (float)$resultTotal['PRIZE']['MONEY'];
+                        $result['premie_show'] = (float)$resultTotal['PRIZE']['MONEY'];
+                    }
+                    
+                    // Prix en nature
+                    if (isset($resultTotal['PRIZE']['TEXT']) && !isset($resultTotal['PRIZE']['MONEY'])) {
+                        $result['rtxt'] = $resultTotal['PRIZE']['TEXT'];
+                        $result['premie'] = 0;
+                        $result['premie_show'] = 0;
+                    }
+                    
+                    // Vérifier si pas de résultats du tout
+                    if (!isset($resultDetails[0]) || count($resultDetails) == 0) {
+                        if (!isset($result['or']) && !isset($result['a'])) {
+                            $result['a'] = 'U';
+                            $result['grundf'] = 999;
+                            $result['grundt'] = 999;
+                            $result['tfg'] = null;
+                            $result['result_preview'] = 'NS';
+                        }
+                    }
                     
                     $results[] = $result;
                 }
@@ -1118,9 +1323,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                     $batchData['starts'] = [
                         'unique_by' => 'foreign_id',
                         'where' => [
-                            'competition' => [
-                                'foreign_id' => $competitionForeignId
-                            ]
+                            'competition' => ['foreign_id' => $competitionForeignId]
                         ],
                         'replace' => true,
                         'records' => $results
@@ -1131,6 +1334,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                     $allBatchData[] = [
                         'competition' => $comp['name'],
                         'competition_foreign_id' => $competitionForeignId,
+                        'is_team' => $isTeamCompetition,
                         'data' => $batchData
                     ];
                 }
@@ -1139,12 +1343,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                     'name' => $comp['name'],
                     'foreign_id' => $competitionForeignId,
                     'results_count' => count($results),
+                    'is_team' => $isTeamCompetition,
                     'time_allowed' => $competitionUpdate['grundt'] ?? null,
                     'time_allowed_jumpoff' => $competitionUpdate['omh1t'] ?? null,
                     'time_allowed_round3' => $competitionUpdate['omh2t'] ?? null,
                     'time_allowed_round4' => $competitionUpdate['omg3t'] ?? null,
                     'time_allowed_round5' => $competitionUpdate['omg4t'] ?? null,
-                    'time_allowed_round6' => $competitionUpdate['omg5t'] ?? null,
                     'rounds' => $resultsData['CLASS']['ROUNDS'] ?? [],
                     'status' => $resultsData['CLASS']['STATUS'] ?? 'unknown'
                 ];
@@ -1404,10 +1608,12 @@ if ($decoded && isset($decoded->payload->target)) {
                             const isClassImported = imported.classes.includes(foreignId);
                             const isStartlistImported = imported.startlists.includes(foreignId);
                             const isResultImported = imported.results.includes(foreignId);
+                            const teamIndicator = cls.name.toLowerCase().includes('team') ? ' 🏆' : '';
                             
-                            row.append('<td>' + cls.nr + ' ' + cls.name + '</td>');
+                            row.append('<td>' + cls.nr + ' ' + cls.name + teamIndicator + '</td>');
                             row.append('<td>' + cls.date + '</td>');
                             
+
                             // Class import
                             row.append('<td>' + (isClassImported ? 
                                 '<i class="fa-solid fa-circle-check" title="Already imported"></i>' : 
@@ -1620,19 +1826,29 @@ if ($decoded && isset($decoded->payload->target)) {
             }
             
             // Traiter les startlists
-            function processStartlists(eventId, startlistsToProcess) {
-                $('#importProgress').append('<div class="progress-section"><h5>Processing Startlists...</h5><div id="startlistProgress"></div></div>');
-                
-                $.ajax({
-                    url: window.location.href,
-                    type: 'POST',
-                    data: {
-                        action: 'import_startlists',
-                        event_id: eventId,
-                        competitions: JSON.stringify(startlistsToProcess),
-                        api_key: '<?php echo $decoded->api_key ?? ''; ?>',
-                        meeting_url: '<?php echo $decoded->payload->meeting_url ?? ''; ?>'
-                    },
+                function processStartlists(eventId, startlistsToProcess) {
+                    $('#importProgress').append('<div class="progress-section"><h5>Processing Startlists...</h5><div id="startlistProgress"></div></div>');
+                    
+                    // Ajouter l'information is_team depuis les sélections originales
+                    const startlistsWithTeamInfo = startlistsToProcess.map(function(startlist) {
+                        // Retrouver la sélection originale pour cette compétition
+                        const originalSelection = currentSelections.find(s => s.class_id == startlist.foreign_id);
+                        return {
+                            ...startlist,
+                            is_team: originalSelection ? originalSelection.team_class : false
+                        };
+                    });
+                    
+                    $.ajax({
+                        url: window.location.href,
+                        type: 'POST',
+                        data: {
+                            action: 'import_startlists',
+                            event_id: eventId,
+                            competitions: JSON.stringify(startlistsWithTeamInfo), // Utiliser la version avec is_team
+                            api_key: '<?php echo $decoded->api_key ?? ''; ?>',
+                            meeting_url: '<?php echo $decoded->payload->meeting_url ?? ''; ?>'
+                        },
                     dataType: 'json',
                     success: function(response) {
                         if (response.success) {
@@ -1677,6 +1893,11 @@ if ($decoded && isset($decoded->payload->target)) {
                     response.processedCompetitions.forEach(function(comp) {
                         html += '<div class="progress-item pending" id="startlist-' + comp.foreign_id + '">';
                         html += '<strong>' + comp.name + '</strong>: ';
+                        
+                        if (comp.is_team) {
+                            html += comp.teams_count + ' teams, ';
+                        }
+                        
                         html += comp.people_count + ' riders, ' + comp.horses_count + ' horses, ' + comp.starts_count + ' starts';
                         html += '</div>';
                     });
@@ -1744,10 +1965,11 @@ if ($decoded && isset($decoded->payload->target)) {
                 const alertDiv = $('#alertMessage');
                 let importResults = [];
                 
-                // D'abord, consolider tous les people et horses de tous les batches
+                // Consolider TOUTES les données de tous les batches
                 let allPeople = [];
                 let allHorses = [];
-                let competitionStarts = []; // Stocker les starts par compétition
+                let allClubs = [];
+                let competitionStarts = []; // Stocker les starts par compétition avec leurs teams
                 
                 // Collecter toutes les données
                 batchDataArray.forEach(function(batch) {
@@ -1757,11 +1979,16 @@ if ($decoded && isset($decoded->payload->target)) {
                     if (batch.data.horses && batch.data.horses.records) {
                         allHorses = allHorses.concat(batch.data.horses.records);
                     }
+                    if (batch.data.clubs && batch.data.clubs.records) {
+                        allClubs = allClubs.concat(batch.data.clubs.records);
+                    }
                     if (batch.data.starts) {
                         competitionStarts.push({
                             competition: batch.competition,
                             competition_foreign_id: batch.competition_foreign_id,
+                            is_team: batch.is_team,
                             starts: batch.data.starts,
+                            teams: batch.data.teams || null, // Inclure les teams si présentes
                             details: batch.details
                         });
                     }
@@ -1787,12 +2014,31 @@ if ($decoded && isset($decoded->payload->target)) {
                     }
                 });
                 
+                // Éliminer les doublons pour clubs (par foreign_id)
+                const uniqueClubs = [];
+                const seenClubsForeignIds = new Set();
+                allClubs.forEach(function(club) {
+                    if (!seenClubsForeignIds.has(club.foreign_id)) {
+                        seenClubsForeignIds.add(club.foreign_id);
+                        uniqueClubs.push(club);
+                    }
+                });
+                
                 debugLog('Total unique people to import:', uniquePeople.length);
                 debugLog('Total unique horses to import:', uniqueHorses.length);
+                debugLog('Total unique clubs to import:', uniqueClubs.length);
                 
-                // Étape 1: Importer d'abord tous les people et horses
+                // Étape 1: Importer d'abord tous les clubs, people et horses
                 const transactionUuid1 = generateUuid();
                 const consolidatedBatch = {};
+                
+                // IMPORTANT: L'ordre est important - clubs en premier
+                if (uniqueClubs.length > 0) {
+                    consolidatedBatch.clubs = {
+                        unique_by: 'foreign_id',
+                        records: uniqueClubs
+                    };
+                }
                 
                 if (uniquePeople.length > 0) {
                     consolidatedBatch.people = {
@@ -1808,9 +2054,16 @@ if ($decoded && isset($decoded->payload->target)) {
                     };
                 }
                 
-                // Si on a des people ou des horses à importer
+                // Si on a des données à importer
                 if (Object.keys(consolidatedBatch).length > 0) {
-                    $('#startlistProgress').prepend('<div class="progress-item pending">Importing riders and horses...</div>');
+                    let importMessage = 'Importing ';
+                    const parts = [];
+                    if (uniqueClubs.length > 0) parts.push('clubs');
+                    if (uniquePeople.length > 0) parts.push('riders');
+                    if (uniqueHorses.length > 0) parts.push('horses');
+                    importMessage += parts.join(', ') + '...';
+                    
+                    $('#startlistProgress').prepend('<div class="progress-item pending">' + importMessage + '</div>');
                     
                     // Utiliser l'action proxy pour éviter CORS
                     $.ajax({
@@ -1826,28 +2079,35 @@ if ($decoded && isset($decoded->payload->target)) {
                         dataType: 'json',
                         success: function(response) {
                             if (response.success) {
-                                debugLog('People and horses imported successfully');
-                                $('#startlistProgress .progress-item:first').removeClass('pending').addClass('success').html('Riders and horses imported successfully');
+                                debugLog('Clubs, people and horses imported successfully');
+                                let successMessage = '';
+                                const successParts = [];
+                                if (uniqueClubs.length > 0) successParts.push(uniqueClubs.length + ' clubs');
+                                if (uniquePeople.length > 0) successParts.push(uniquePeople.length + ' riders');
+                                if (uniqueHorses.length > 0) successParts.push(uniqueHorses.length + ' horses');
+                                successMessage = successParts.join(', ') + ' imported successfully';
                                 
-                                // Étape 2: Importer les starts pour chaque compétition
-                                importStartlists();
+                                $('#startlistProgress .progress-item:first').removeClass('pending').addClass('success').html(successMessage);
+                                
+                                // Étape 2: Importer les teams et starts pour chaque compétition
+                                setTimeout(importTeamsAndStartlists, 500);
                             } else {
-                                $('#startlistProgress .progress-item:first').removeClass('pending').addClass('failed').html('Failed to import riders and horses');
-                                debugLog('Failed to import people and horses:', response);
+                                $('#startlistProgress .progress-item:first').removeClass('pending').addClass('failed').html('Failed to import basic data');
+                                debugLog('Failed to import:', response);
                             }
                         },
                         error: function(xhr, status, error) {
-                            $('#startlistProgress .progress-item:first').removeClass('pending').addClass('failed').html('Failed to import riders and horses');
+                            $('#startlistProgress .progress-item:first').removeClass('pending').addClass('failed').html('Failed to import basic data');
                             debugLog('Request failed:', error);
                         }
                     });
                 } else {
-                    // Si pas de people/horses à importer, passer directement aux starts
-                    importStartlists();
+                    // Si pas de clubs/people/horses à importer, passer directement aux teams et starts
+                    importTeamsAndStartlists();
                 }
                 
-                // Fonction pour importer les startlists après les people/horses
-                function importStartlists() {
+                // Fonction pour importer les teams et startlists
+                function importTeamsAndStartlists() {
                     let successCount = 0;
                     let failCount = 0;
                     let processed = 0;
@@ -1855,8 +2115,17 @@ if ($decoded && isset($decoded->payload->target)) {
                     
                     competitionStarts.forEach(function(compStarts) {
                         const transactionUuid = generateUuid();
+                        const batchData = {};
                         
-                        debugLog('Sending batch for:', compStarts.competition);
+                        // Pour les compétitions par équipe, inclure les teams
+                        if (compStarts.is_team && compStarts.teams) {
+                            batchData.teams = compStarts.teams;
+                        }
+                        
+                        // Ajouter les starts
+                        batchData.starts = compStarts.starts;
+                        
+                        debugLog('Sending batch for:', compStarts.competition, 'with teams:', compStarts.teams ? 'yes' : 'no');
                         
                         // Utiliser l'action proxy pour éviter CORS
                         $.ajax({
@@ -1864,7 +2133,7 @@ if ($decoded && isset($decoded->payload->target)) {
                             type: 'POST',
                             data: {
                                 action: 'send_batch_to_equipe',
-                                batch_data: JSON.stringify({ starts: compStarts.starts }),
+                                batch_data: JSON.stringify(batchData),
                                 api_key: '<?php echo $decoded->api_key ?? ''; ?>',
                                 meeting_url: '<?php echo $decoded->payload->meeting_url ?? ''; ?>',
                                 transaction_uuid: transactionUuid
@@ -1874,6 +2143,9 @@ if ($decoded && isset($decoded->payload->target)) {
                                 if (response.success) {
                                     successCount++;
                                     $('#startlist-' + compStarts.competition_foreign_id).removeClass('pending').addClass('success');
+                                    if (compStarts.teams && compStarts.teams.records) {
+                                        $('#startlist-' + compStarts.competition_foreign_id).append(' <small>(' + compStarts.teams.records.length + ' teams)</small>');
+                                    }
                                 } else {
                                     failCount++;
                                     $('#startlist-' + compStarts.competition_foreign_id).removeClass('pending').addClass('failed');
