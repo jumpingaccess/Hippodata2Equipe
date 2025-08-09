@@ -1,3 +1,5 @@
+![Image Alt Text](images/index_extension.png)
+
 # Equipe Extension - Hippodata Import
 
 This extension allows importing competitions, start lists and results from the Hippodata API to Equipe.
