@@ -1,3 +1,7 @@
+![Image Alt Text](images/index_extension.png)
+![Image Alt Text](images/competitions_screen.png)
+![Image Alt Text](images/checkbox_to_import.png)
+
 # Equipe Extension - Hippodata Import
 
 This extension allows importing competitions, start lists and results from the Hippodata API to Equipe.
@@ -11,6 +15,11 @@ This extension allows importing competitions, start lists and results from the H
 - **Smart duplicate management**: Avoids duplication of existing riders and horses
 - **Multi-round support**: Handles up to 6 rounds per competition
 - **Debug mode**: Detailed operation display for troubleshooting
+
+## TODO (03/08/2025)
+
+- **Add FEI Article management**
+- **Team competitions import with teams and riders**
 
 ## Installation
 
