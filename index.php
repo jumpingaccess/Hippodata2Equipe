@@ -85,51 +85,111 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             foreach ($data ?? [] as $c) {
                 if (!empty($c['foreignid'])) {
                     $foreignId = $c['foreignid'];
+                    $classid = $c['kq'];
                     $existing['classes'][] = $foreignId;
                     
+                    // Détecter si c'est une compétition par équipe
+                    $isTeamCompetition = isset($c['lag']) && $c['lag'] === true;
+                    //error_log('IsTeamCompetition: '. $isTeamCompetition."Forgein ID: ".$foreignId);
                     // Tester l'existence d'une startlist pour cette classe
-                    $startUrl = rtrim($meetingUrl, '/') . "/competitions/{$foreignId}/starts.json";
+                    $startUrl = rtrim($meetingUrl, '/') . "/competitions/{$classid}/starts.json";
                     $ch = curl_init($startUrl);
                     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
                     curl_setopt($ch, CURLOPT_HTTPHEADER, [
                         "X-Api-Key: {$apiKey}",
                         "Accept: application/json"
                     ]);
+                    curl_setopt($ch, CURLOPT_TIMEOUT, 10);
                     $resp = curl_exec($ch);
+                    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
                     curl_close($ch);
-                    $starts = json_decode($resp, true);
-                    if (!empty($starts) && is_array($starts)) {
-                        $existing['startlists'][] = $foreignId;
+                    
+                    if ($httpCode === 200) {
+                        $starts = json_decode($resp, true);
+                        //error_log("Starts : ".print_r($starts,true));
+                        if (!empty($starts) && is_array($starts)) {
+                            // Pour les compétitions par équipe, vérifier la présence de teams
+                            if ($isTeamCompetition) {
+                                $hasTeamStarts = false;
+                              
+                                foreach ($starts as $start) {
+                                    //error_log('Start Lag: '.$start['lag_id']);
+                                    if (isset($start['lag_id']) || isset($start['team'])) {
+                                        $hasTeamStarts = true;
+                                        break;
+                                    }
+                                }
+                                if ($hasTeamStarts || count($starts) > 0) {
+                                    $existing['startlists'][] = $foreignId;
+                                }
+                            } else {
+                                // Pour les compétitions individuelles
+                                $existing['startlists'][] = $foreignId;
+                            }
+                        }
                     }
 
-                    // Tester l'existence de résultats pour cette classe
-                    $resultsUrl = rtrim($meetingUrl, '/') . "/competitions/{$foreignId}/H/results.json";
+                    // Tester l'existence de résultats
+                    // D'abord essayer avec /H/results.json (standard)
+                    $resultsUrl = rtrim($meetingUrl, '/') . "/competitions/{$classid}/H/results.json";
+                    error_log("URL: ".$resultsUrl);
                     $ch = curl_init($resultsUrl);
                     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
                     curl_setopt($ch, CURLOPT_HTTPHEADER, [
                         "X-Api-Key: {$apiKey}",
                         "Accept: application/json"
                     ]);
+                    curl_setopt($ch, CURLOPT_TIMEOUT, 10);
                     $resp = curl_exec($ch);
                     $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
                     curl_close($ch);
 
+                    $hasResults = false;
+                    
                     if ($httpCode === 200) {
                         $results = json_decode($resp, true);
-                        // Vérifier qu'il y a des résultats avec des données de round 1
-                        $hasActualResults = false;
                         if (!empty($results) && is_array($results)) {
                             foreach ($results as $result) {
-                                // Vérifier la présence de grundf ou grundt (Round 1 data)
-                                if (isset($result['grundf']) || isset($result['grundt'])) {
-                                    $hasActualResults = true;
-                                    break;
+                                if ($debugMode) {
+                                    error_log("Result data: " . json_encode($result));
                                 }
+                                
+                                // Un résultat est considéré comme importé seulement s'il a des données réelles
+                                $hasResultData = false;
+                                
+                                // Vérifier les données du round 1 - doit avoir une valeur numérique
+                                if (isset($result['grundf']) && is_numeric($result['grundf']) && $result['grundf'] !== '') {
+                                    $hasResultData = true;
+                                    if ($debugMode) {
+                                        error_log("Found grundf with value: " . $result['grundf']);
+                                    }
+                                }
+                                
+                                if (isset($result['grundt']) && is_numeric($result['grundt']) && $result['grundt'] !== '') {
+                                    $hasResultData = true;
+                                    if ($debugMode) {
+                                        error_log("Found grundt with value: " . $result['grundt']);
+                                    }
+                                }
+                                if ($hasResultData) {
+                                    $hasResults = true;
+                                    break;
+                                } 
+                            }
+                            if ($debugMode && !$hasResults) {
+                                error_log("No actual result data found for competition " . $foreignId);
                             }
                         }
-                        if ($hasActualResults) {
-                            $existing['results'][] = $foreignId;
-                        }
+                    }
+                    
+                    if ($hasResults) {
+                        $existing['results'][] = $foreignId;
+                    }
+                    
+                    // Pour debug
+                    if ($debugMode && $isTeamCompetition) {
+                        error_log("Team competition $foreignId - Starts found: " . (in_array($classid, $existing['startlists']) ? 'yes' : 'no'));
+                        error_log("Team competition $foreignId - Results found: " . ($hasResults ? 'yes' : 'no'));
                     }
                 }
             }
@@ -1603,7 +1663,8 @@ if ($decoded && isset($decoded->payload->target)) {
                         data.classes.forEach(function(cls, index) {
                             const row = $('<tr>');
                             const foreignId = cls.id.toString();
-                            
+                            // Définir isTeamClass ICI, au début de la boucle
+                            var isTeamClass = cls.TEAM_CLASS === "true" || cls.TEAM_CLASS === true;
                             // Vérifier si déjà importé
                             const isClassImported = imported.classes.includes(foreignId);
                             const isStartlistImported = imported.startlists.includes(foreignId);
@@ -1612,22 +1673,25 @@ if ($decoded && isset($decoded->payload->target)) {
                             
                             row.append('<td>' + cls.nr + ' ' + cls.name + teamIndicator + '</td>');
                             row.append('<td>' + cls.date + '</td>');
-                            
+                            var hasTeamStarts = false;
+                            if (isTeamClass && existingData.teamStarts && existingData.teamStarts.indexOf(cls.id) !== -1) {
+                                hasTeamStarts = true;
+                            }
 
                             // Class import
                             row.append('<td>' + (isClassImported ? 
-                                '<i class="fa-solid fa-circle-check" title="Already imported"></i>' : 
+                                '<i class="fa-solid fa-circle-check fa-lg" style="color:rgb(24, 141, 8);" title="Already imported" ></i>' : 
                                 '<input type="checkbox" class="class-import" data-class-id="' + cls.id + '" data-index="' + index + '">') + '</td>');
                             
                             // Startlist import
                             row.append('<td>' + (isStartlistImported ? 
-                                '<i class="fa-solid fa-circle-check" title="Already imported"></i>' : 
+                                '<i class="fa-solid fa-circle-check fa-lg" style="color: rgb(24, 141, 8);" title="Already imported' + (hasTeamStarts ? ' (with teams)' : '') + '"></i>' : 
                                 '<input type="checkbox" class="startlist-import" data-class-id="' + cls.id + '" data-index="' + index + '" ' + 
                                 (!isClassImported ? 'title="Import class first"' : '') + '>') + '</td>');
-                            
+
                             // Result import
                             row.append('<td>' + (isResultImported ? 
-                                '<i class="fa-solid fa-circle-check" title="Already imported"></i>' : 
+                                '<i class="fa-solid fa-circle-check fa-lg" style="color: rgb(24, 141, 8);" title="Already imported"></i>' : 
                                 '<input type="checkbox" class="result-import" data-class-id="' + cls.id + '" data-index="' + index + '" ' + 
                                 (!isClassImported ? 'title="Import class first"' : '') + '>') + '</td>');
                             
