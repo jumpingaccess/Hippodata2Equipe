@@ -190,6 +190,7 @@ Create an action:
 
 ### Results
 | Hippodata | Equipe | Description| 
+|-----------|---------|-------------|
 | RANK | re| Final ranking | 
 | FAULTS R1 | grundf | Round 1 faults |
 | TIME R1 | grundt | Round 1 time | 
