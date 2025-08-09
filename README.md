@@ -245,14 +245,13 @@ If duplicates appear, verify that FEI IDs are correct.
 - `/scoring/event/{eventId}/resultlist/{classNr}`: Results
 
 ### Equipe
-- `/batch`: Bulk import
-- `/people.json`: List of existing people
-- `/horses.json`: List of existing horses
+- `JWT decoded->palyload->meeting_url/batch`: Bulk import
+- `JWT decoded->palyload->meeting_url/people.json`: List of existing people
+- `JWT decoded->palyload->meeting_url/horses.json`: List of existing horses
 
 ## Support
 
 For any questions or issues:
-- Equipe API Documentation: http://api-docs.equipe.com/
-- Equipe Support: support@equipe.com
+- Jumpingaccess Support: info@jumpingaccess.com
 - Server logs for PHP errors
 - Debug mode to trace operations
