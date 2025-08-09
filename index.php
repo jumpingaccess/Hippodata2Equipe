@@ -53,7 +53,94 @@ $debugMode = isset($_ENV['DEBUG']) && $_ENV['DEBUG'] == '1';
 // Traiter les requêtes AJAX
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     header('Content-Type: application/json');
-    
+    // check exists
+    if ($_POST['action'] === 'get_imported_status') {
+        $meetingUrl = $_POST['meeting_url'] ?? '';
+        $apiKey = $_POST['api_key'] ?? '';
+        
+        if (empty($meetingUrl) || empty($apiKey)) {
+            echo json_encode(['success' => false, 'error' => 'Missing parameters']);
+            exit;
+        }
+        
+        try {
+            $existing = [
+                'classes' => [],
+                'startlists' => [],
+                'results' => []
+            ];
+            
+            // Charger les compétitions existantes
+            $compUrl = rtrim($meetingUrl, '/') . '/competitions.json';
+            $ch = curl_init($compUrl);
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_HTTPHEADER, [
+                "X-Api-Key: {$apiKey}",
+                "Accept: application/json"
+            ]);
+            $resp = curl_exec($ch);
+            curl_close($ch);
+            $data = json_decode($resp, true);
+            
+            foreach ($data ?? [] as $c) {
+                if (!empty($c['foreignid'])) {
+                    $foreignId = $c['foreignid'];
+                    $existing['classes'][] = $foreignId;
+                    
+                    // Tester l'existence d'une startlist pour cette classe
+                    $startUrl = rtrim($meetingUrl, '/') . "/competitions/{$foreignId}/starts.json";
+                    $ch = curl_init($startUrl);
+                    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+                    curl_setopt($ch, CURLOPT_HTTPHEADER, [
+                        "X-Api-Key: {$apiKey}",
+                        "Accept: application/json"
+                    ]);
+                    $resp = curl_exec($ch);
+                    curl_close($ch);
+                    $starts = json_decode($resp, true);
+                    if (!empty($starts) && is_array($starts)) {
+                        $existing['startlists'][] = $foreignId;
+                    }
+
+                    // Tester l'existence de résultats pour cette classe
+                    $resultsUrl = rtrim($meetingUrl, '/') . "/competitions/{$foreignId}/H/results.json";
+                    $ch = curl_init($resultsUrl);
+                    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+                    curl_setopt($ch, CURLOPT_HTTPHEADER, [
+                        "X-Api-Key: {$apiKey}",
+                        "Accept: application/json"
+                    ]);
+                    $resp = curl_exec($ch);
+                    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+                    curl_close($ch);
+
+                    if ($httpCode === 200) {
+                        $results = json_decode($resp, true);
+                        // Vérifier qu'il y a des résultats avec des données de round 1
+                        $hasActualResults = false;
+                        if (!empty($results) && is_array($results)) {
+                            foreach ($results as $result) {
+                                // Vérifier la présence de grundf ou grundt (Round 1 data)
+                                if (isset($result['grundf']) || isset($result['grundt'])) {
+                                    $hasActualResults = true;
+                                    break;
+                                }
+                            }
+                        }
+                        if ($hasActualResults) {
+                            $existing['results'][] = $foreignId;
+                        }
+                    }
+                }
+            }
+            
+            echo json_encode(['success' => true, 'existing' => $existing]);
+        } catch (Exception $e) {
+            echo json_encode(['success' => false, 'error' => $e->getMessage()]);
+        }
+        
+        exit;
+    }
     // Nouvelle action pour récupérer les infos de l'event
     if ($_POST['action'] === 'fetch_event_info') {
         $showId = $_POST['show_id'] ?? '';
@@ -1013,6 +1100,8 @@ if ($decoded && isset($decoded->payload->target)) {
     <link rel="stylesheet" href="<?php echo htmlspecialchars($decoded->payload->style_url ?? ''); ?>">
     <link rel="stylesheet" href="css/custom.css?version=<?php echo rand();?>">
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
+
 
 </head>
 <body class="extension">
@@ -1038,7 +1127,11 @@ if ($decoded && isset($decoded->payload->target)) {
         <!-- Étape 2: Sélection des classes -->
         <div id="selectionStep" style="display: none;">
             <div id="eventInfo"></div>
-            
+            <!-- Ajouter après <div id="eventInfo"></div> -->
+            <div id="loading-status" class="text-center my-3" style="display: none;">
+                <i class="fa fa-spinner fa-spin fa-2x text-primary"></i>
+                <p>Checking import status...</p>
+            </div>
             <table class="classes-table" id="classesTable">
                 <thead>
                     <tr>
@@ -1193,6 +1286,7 @@ if ($decoded && isset($decoded->payload->target)) {
             });
             
             // Afficher les infos de l'event
+            // Afficher les infos de l'event
             function displayEventInfo(data) {
                 $('#eventInfo').html(
                     '<h4>' + data.event.name + '</h4>' +
@@ -1200,24 +1294,96 @@ if ($decoded && isset($decoded->payload->target)) {
                     '<p><strong>Venue:</strong> ' + data.event.venue + '</p>'
                 );
                 
-                // Remplir le tableau des classes
                 const tbody = $('#classesTableBody');
                 tbody.empty();
                 
-                data.classes.forEach(function(cls, index) {
-                    const row = $('<tr>');
-                    row.append('<td>' + index+ " "+cls.name + '</td>');
-                    row.append('<td>' + cls.date + '</td>');
-                    row.append('<td><input type="checkbox" class="class-import" data-class-id="' + cls.id + '" data-index="' + index + '"></td>');
-                    row.append('<td><input type="checkbox" class="startlist-import" data-class-id="' + cls.id + '" data-index="' + index + '"></td>');
-                    row.append('<td><input type="checkbox" class="result-import" data-class-id="' + cls.id + '" data-index="' + index + '"></td>');
-                    row.append('<td><input type="checkbox" class="team-class" data-class-id="' + cls.id + '" data-index="' + index + '"></td>');
-                    row.append('<td><select class="fei-article" data-class-id="' + cls.id + '" data-index="' + index + '">' + $('#selectAllArticle').html() + '</select></td>');
-                    
-                    tbody.append(row);
+                // Afficher le spinner
+                $('#loading-status').show();
+                
+                // Vérifier le statut des imports existants
+                $.ajax({
+                    url: window.location.href,
+                    type: 'POST',
+                    data: {
+                        action: 'get_imported_status',
+                        meeting_url: '<?php echo $decoded->payload->meeting_url ?? ''; ?>',
+                        api_key: '<?php echo $decoded->api_key ?? ''; ?>'
+                    },
+                    dataType: 'json',
+                    success: function(response) {
+                        const imported = response.existing || { classes: [], startlists: [], results: [] };
+                        
+                        data.classes.forEach(function(cls, index) {
+                            const row = $('<tr>');
+                            const foreignId = cls.id.toString();
+                            
+                            // Vérifier si déjà importé
+                            const isClassImported = imported.classes.includes(foreignId);
+                            const isStartlistImported = imported.startlists.includes(foreignId);
+                            const isResultImported = imported.results.includes(foreignId);
+                            
+                            row.append('<td>' + cls.nr + ' ' + cls.name + '</td>');
+                            row.append('<td>' + cls.date + '</td>');
+                            
+                            // Class import
+                            row.append('<td>' + (isClassImported ? 
+                                '<i class="fa-solid fa-circle-check" title="Already imported"></i>' : 
+                                '<input type="checkbox" class="class-import" data-class-id="' + cls.id + '" data-index="' + index + '">') + '</td>');
+                            
+                            // Startlist import
+                            row.append('<td>' + (isStartlistImported ? 
+                                '<i class="fa-solid fa-circle-check" title="Already imported"></i>' : 
+                                '<input type="checkbox" class="startlist-import" data-class-id="' + cls.id + '" data-index="' + index + '" ' + 
+                                (!isClassImported ? 'title="Import class first"' : '') + '>') + '</td>');
+                            
+                            // Result import
+                            row.append('<td>' + (isResultImported ? 
+                                '<i class="fa-solid fa-circle-check" title="Already imported"></i>' : 
+                                '<input type="checkbox" class="result-import" data-class-id="' + cls.id + '" data-index="' + index + '" ' + 
+                                (!isClassImported ? 'title="Import class first"' : '') + '>') + '</td>');
+                            
+                            // Team class - toujours disponible
+                            row.append('<td><input type="checkbox" class="team-class" data-class-id="' + cls.id + '" data-index="' + index + '"></td>');
+                            
+                            // FEI Article - toujours disponible
+                            row.append('<td><select class="fei-article" data-class-id="' + cls.id + '" data-index="' + index + '">' + $('#selectAllArticle').html() + '</select></td>');
+                            
+                            tbody.append(row);
+                        });
+                    },
+                    error: function() {
+                        // En cas d'erreur, afficher quand même le tableau sans statut
+                        data.classes.forEach(function(cls, index) {
+                            const row = $('<tr>');
+                            
+                            row.append('<td>' + cls.nr + ' ' + cls.name + '</td>');
+                            row.append('<td>' + cls.date + '</td>');
+                            row.append('<td><input type="checkbox" class="class-import" data-class-id="' + cls.id + '" data-index="' + index + '"></td>');
+                            row.append('<td><input type="checkbox" class="startlist-import" data-class-id="' + cls.id + '" data-index="' + index + '"></td>');
+                            row.append('<td><input type="checkbox" class="result-import" data-class-id="' + cls.id + '" data-index="' + index + '"></td>');
+                            row.append('<td><input type="checkbox" class="team-class" data-class-id="' + cls.id + '" data-index="' + index + '"></td>');
+                            row.append('<td><select class="fei-article" data-class-id="' + cls.id + '" data-index="' + index + '">' + $('#selectAllArticle').html() + '</select></td>');
+                            
+                            tbody.append(row);
+                        });
+                    },
+                    complete: function() {
+                        // Masquer le spinner
+                        $('#loading-status').hide();
+                    }
                 });
             }
-            
+            // Gérer l'activation/désactivation des checkboxes basée sur les dépendances
+            $(document).on('change', '.class-import', function() {
+                const classId = $(this).data('class-id');
+                const isChecked = $(this).is(':checked');
+                const row = $(this).closest('tr');
+                
+                // Si on décoche la classe, décocher aussi startlist et results
+                if (!isChecked) {
+                    row.find('.startlist-import, .result-import').prop('checked', false);
+                }
+            });
             // Gestion des "Select All"
             $('#selectAllClasses').on('change', function() {
                 $('.class-import').prop('checked', $(this).is(':checked'));
@@ -1251,16 +1417,20 @@ if ($decoded && isset($decoded->payload->target)) {
                 
                 $('#classesTableBody tr').each(function(index) {
                     const row = $(this);
-                    const classId = row.find('.class-import').data('class-id');
                     const classData = currentEventData.classes[index];
                     
+                    // Vérifier d'abord si les checkboxes existent (pas remplacées par des coches)
+                    const classCheckbox = row.find('.class-import');
+                    const startlistCheckbox = row.find('.startlist-import');
+                    const resultCheckbox = row.find('.result-import');
+                    
                     const selection = {
-                        class_id: classId,
+                        class_id: classData.id,
                         class_nr: classData.nr,
                         class_name: classData.name,
-                        import_class: row.find('.class-import').is(':checked'),
-                        import_startlist: row.find('.startlist-import').is(':checked'),
-                        import_results: row.find('.result-import').is(':checked'),
+                        import_class: classCheckbox.length > 0 && classCheckbox.is(':checked'),
+                        import_startlist: startlistCheckbox.length > 0 && startlistCheckbox.is(':checked'),
+                        import_results: resultCheckbox.length > 0 && resultCheckbox.is(':checked'),
                         team_class: row.find('.team-class').is(':checked'),
                         fei_article: row.find('.fei-article').val()
                     };
@@ -1306,15 +1476,36 @@ if ($decoded && isset($decoded->payload->target)) {
                         if (response.success) {
                             displayImportResults(response);
                             
+                            // Collecter toutes les startlists à traiter (même si pas de classes importées)
+                            const allStartlistsToProcess = [];
+                            const allResultsToProcess = [];
+                            
+                            currentSelections.forEach(function(sel) {
+                                if (sel.import_startlist) {
+                                    allStartlistsToProcess.push({
+                                        foreign_id: sel.class_id,
+                                        class_id: sel.class_nr,
+                                        name: sel.class_name
+                                    });
+                                }
+                                if (sel.import_results) {
+                                    allResultsToProcess.push({
+                                        foreign_id: sel.class_id,
+                                        class_id: sel.class_nr,
+                                        name: sel.class_name
+                                    });
+                                }
+                            });
+                            
                             // Si on a des startlists à traiter
-                            if (response.startlists_to_process && response.startlists_to_process.length > 0) {
+                            if (allStartlistsToProcess.length > 0) {
                                 setTimeout(function() {
-                                    processStartlists(response.event_id, response.startlists_to_process);
+                                    processStartlists(response.event_id, allStartlistsToProcess);
                                 }, 1000);
-                            } else if (response.results_to_process && response.results_to_process.length > 0) {
+                            } else if (allResultsToProcess.length > 0) {
                                 // Si on a seulement des résultats à traiter
                                 setTimeout(function() {
-                                    processResults(response.event_id, response.results_to_process);
+                                    processResults(response.event_id, allResultsToProcess);
                                 }, 1000);
                             }
                         } else {
