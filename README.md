@@ -8,18 +8,28 @@ This extension allows importing competitions, start lists and results from the H
 
 ## Features
 
-- **Import competitions/classes**: Import events with their information (prize money, dates, etc.)
+- **Import competitions/classes**: Import events with their information (prize money, dates, FEI articles)
 - **Import startlists**: Import riders, horses and entries
 - **Import results**: Import complete results with times, faults and rankings
+- **Team competitions support**: Full support for Nations Cup and team events
+- **Import status checking**: Visual indicators for already imported data
+- **FEI Article management**: Select competition format according to FEI rules
 - **Flexible import**: Import separately or in combination
 - **Smart duplicate management**: Avoids duplication of existing riders and horses
-- **Multi-round support**: Handles up to 6 rounds per competition
+- **Multi-round support**: Handles up to 5 rounds per competition
+- **Special status handling**: Eliminated, retired, withdrawn, abstained riders
 - **Debug mode**: Detailed operation display for troubleshooting
 
-## TODO (03/08/2025)
+## ✅ Completed Features (as of 09/08/2025)
 
-- **Add FEI Article management**
-- **Team competitions import with teams and riders**
+- ✅ **FEI Article management**: Full list of FEI competition formats
+- ✅ **Team competitions**: Automatic team creation based on nations (minimum 3 riders)
+- ✅ **Import status indicators**: Green checkmarks for already imported items
+- ✅ **Enhanced results handling**: Support for abstained riders in team competitions
+- ✅ **Country name mapping**: IOC codes mapped to full country names
+
+## TODO
+- **FEI Article Management**
 
 ## Installation
 
@@ -90,48 +100,54 @@ Create an action:
 
 ### Import Interface
 
-1. In Equipe, open a meeting
-2. Click on "Import from Hippodata" action
-3. In the window that opens:
-   - Enter the FEI event identifier
-   - Select items to import:
-     - ☐ Import classes (competitions)
-     - ☐ Import startlists (riders & horses)
-     - ☐ Import results
-   - Click "Start Import Process"
+- In Equipe, open a meeting
+- Click on "Import from Hippodata" action
+- In the window that opens:
+  - Enter the FEI Show ID (Event identifier)
+  - Click "Search Event"
+  - The system will display:
+    - Event name and venue
+    - List of all classes/competitions
+    - Import status for each item (✓ = already imported)
 
 ### Import Options
 
-#### Import classes only
-- Imports competitions with their information
-- Creates competitions in Equipe with:
-  - Name and sponsor
-  - Date and venue
-  - Prize money amount
-  - Currency
+- For each class, you can select:
 
-#### Import startlists
-- Can be done with or without class import
-- Imports:
-  - **Riders**: First name, last name, country, FEI ID
-  - **Horses**: Name, gender, birth year, owner, FEI ID
-  - **Entries**: Links between riders, horses and competitions
-- Automatically avoids duplicates based on FEI IDs
+  - ☐ Class Import: Import the competition definition
+  - ☐ Startlist Import: Import riders, horses and entries
+  - ☐ Result Import: Import competition results
+  - ☐ Team Class: Mark as team competition (Nations Cup)
+  - FEI Article: Select the competition format
 
-#### Import results
-- Can be done with or without other imports
-- Imports for each round:
-  - Obstacle faults
-  - Time taken
-  - Time penalties
-  - Final ranking
-  - Prize money won
-- Handles special statuses:
-  - Eliminated (D)
-  - Retired (U)
-  - Disqualified (S)
-  - Withdrawn (Ö)
-- Supports team competitions
+- Team Competitions
+  - When "Team Class" is checked:
+    - Automatically creates teams based on nations
+    - Only nations with 3+ riders get a team
+    - Creates clubs with country flags
+    - Links riders to their national teams
+    - Handles team-specific results (abstained riders count for team)
+
+- Import Status Indicators
+  - ✓ Green checkmark: Already imported
+  - Checkbox: Available for import
+  - Disabled checkbox: Requires prerequisite (e.g., class must exist before startlist)
+
+### Special Results Handling
+  - Individual Competitions
+    - Eliminated (EL): or = 'D', grundf = 999
+    - Retired (RET): or = 'U', grundf = 999
+    - Disqualified (DSQ): or = 'S', grundf = 999
+    - Withdrawn: a = 'Ö' or special handling per round
+    - No Show (NS): a = 'U', grundf = 999
+
+  - Team Competitions
+    - Riders who complete round 1 but not round 2 are marked as "Abstained"
+    - Abstained riders: omh1f = 999, omh1t = 999, round2_in_team = true
+    - Result preview shows: "8-ABST" (faults from round 1 + abstained)
+    - Eliminated/retired riders keep their normal status (not converted to abstained)
+
+
 
 ### Possible Combinations
 
@@ -173,14 +189,31 @@ Create an action:
 | OWNER | owner | Owner |
 
 ### Results
-| Hippodata | Equipe | Description |
-|-----------|---------|-------------|
-| RANK | re | Ranking |
-| FAULTS | grundf, omh1f, etc. | Faults per round |
-| TIME | grundt, omh1t, etc. | Time per round |
-| TIMEFAULTS | tfg, tf1, etc. | Time penalties |
-| PRIZE.MONEY | premie | Prize money won |
-| STATUS | or, a | Status (eliminated, etc.) |
+| Hippodata | Equipe | Description| 
+| RANK | re| Final ranking | 
+| FAULTS R1 | grundf | Round 1 faults |
+| TIME R1 | grundt | Round 1 time | 
+| FAULTS R2 | omh1f | Round 2/Jump-off faults | 
+| TIME R2 | omh1t | Round 2/Jump-off time | 
+| TIMEFAULTS | tfg, tf1, etc. | Time penalties per round | 
+| PRIZE.MONEY | premie | Prize money won | 
+| STATUS | or, a | Special status | 
+| - | round1_in_team | Counts for team in R1 | 
+| - | round2_in_team | Counts for team in R2 | 
+| - | result_preview | Display format (e.g., "8-ABST")| 
+
+### Import Process Flow
+
+- Search Event: Fetch event data from Hippodata
+- Check Existing: Query Equipe for already imported items
+- Display Selection: Show classes with import status
+- Process Selection:
+  - Import classes (if selected)
+  - Import clubs (for team competitions)
+  - Import people and horses
+  - Import teams (for team competitions)
+  - Import starts/entries
+  - Import results (if selected)
 
 ## Debug Mode
 
@@ -189,11 +222,23 @@ Enable debug mode in `.env.php`:
 'DEBUG' => '1'
 ```
 
-This displays:
-- API requests made
-- Data received and sent
-- Transaction UUIDs for rollback
-- Import details per competition
+- This displays:
+  - API requests made
+  - Data received and sent
+  - Transaction UUIDs for rollback
+  - Team creation details
+  - Import progress for each batch
+
+- Batch Import Structure
+  - The extension uses Equipe's batch API with proper ordering:
+    - Classes/Competitions
+    - Clubs (for teams)
+    - People & Horses
+    - Teams
+    - Starts/Entries
+    - Results
+
+- Each batch uses a unique transaction UUID for potential rollback.
 
 ## Security
 
@@ -216,6 +261,18 @@ Check:
 
 The FEI event identifier is mandatory. Format: integer number.
 
+### Import status not showing
+
+- Check API key permissions for GET requests
+- Verify meeting URL is correct
+- Enable debug mode to see API responses
+
+### Teams not created
+
+- Ensure "Team Class" checkbox is selected
+- Verify nation has 3+ riders
+- Check clubs endpoint is accessible
+
 ### Hippodata authentication error
 
 Check:
@@ -237,6 +294,12 @@ The extension automatically avoids duplicates by checking:
 - The `fei_id` field
 If duplicates appear, verify that FEI IDs are correct.
 
+### Results showing incorrect status
+
+- Abstained: Only for team competitions when rider doesn't start later rounds
+- Eliminated/Retired: Keep their original status, not converted to abstained
+- Check RESULTTOTAL.TEXT field in Hippodata response
+
 ## API Endpoints Used
 
 ### Hippodata
@@ -245,10 +308,14 @@ If duplicates appear, verify that FEI IDs are correct.
 - `/scoring/event/{eventId}/resultlist/{classNr}`: Results
 
 ### Equipe
-- `JWT decoded->palyload->meeting_url/batch`: Bulk import
-- `JWT decoded->palyload->meeting_url/people.json`: List of existing people
-- `JWT decoded->palyload->meeting_url/horses.json`: List of existing horses
 
+- `JWT decoded->palyload->meeting_url/batch`: Bulk import
+- `JWT decoded->palyload->meeting_url/people.json`: Existing people
+- `JWT decoded->palyload->meeting_url/horses.json`: Existing horses
+- `JWT decoded->palyload->meeting_url/clubs.json`: Existing clubs
+- `JWT decoded->palyload->meeting_url/competitions.json`: Existing competitions
+- `JWT decoded->palyload->meeting_url/competitions/{id}/starts.json`: Check startlists
+- `JWT decoded->palyload->meeting_url/competitions/{id}/H/results.json`: Check results
 ## Support
 
 For any questions or issues:
