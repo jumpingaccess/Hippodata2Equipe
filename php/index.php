@@ -1815,6 +1815,61 @@ if ($decoded && isset($decoded->payload->target)) {
     </div>
     
     <script>
+        const spinnerStyles = `
+            <style>
+            .progress-section {
+                margin-bottom: 20px;
+                padding: 15px;
+                border: 1px solid #ddd;
+                border-radius: 5px;
+                background-color: #f9f9f9;
+            }
+
+            .progress-section h5 {
+                margin-top: 0;
+                margin-bottom: 15px;
+                color: #333;
+            }
+
+            .progress-section .text-center {
+                margin: 20px 0;
+            }
+
+            .progress-section .fa-spinner {
+                color: #007bff;
+            }
+
+            .progress-item {
+                padding: 8px 12px;
+                margin: 5px 0;
+                border-radius: 3px;
+                transition: all 0.3s ease;
+            }
+
+            .progress-item.pending {
+                background-color: #f0f0f0;
+                color: #666;
+            }
+
+            .progress-item.success {
+                background-color: #d4edda;
+                color: #155724;
+                border: 1px solid #c3e6cb;
+            }
+
+            .progress-item.failed {
+                background-color: #f8d7da;
+                color: #721c24;
+                border: 1px solid #f5c6cb;
+            }
+            </style>
+        `;
+
+        // Ajouter les styles au document
+        $(document).ready(function() {
+            $('head').append(spinnerStyles);
+        });
+
         const debugMode = <?php echo $debugMode ? 'true' : 'false'; ?>;
         let currentEventData = null;
         let currentSelections = [];
@@ -1874,16 +1929,16 @@ if ($decoded && isset($decoded->payload->target)) {
             // Afficher les infos de l'event
 
             function displayEventInfo(data) {
-                // Construire l'URL du logo
+                // Construire les URLs possibles du logo
                 var currentYear = new Date().getFullYear();
-                var logoUrl = 'https://results.hippodata.de/' + currentYear + '/' + data.event.id + '/evt_logo.jpg';
+                var logoBaseUrl = 'https://results.hippodata.de/' + currentYear + '/' + data.event.id + '/evt_logo';
+                var logoUrlJpg = logoBaseUrl + '.jpg';
+                var logoUrlPng = logoBaseUrl + '.png';
                 
-                // Créer le HTML avec le logo (caché par défaut)
+                // Créer le HTML de base sans logo
                 var htmlContent = '<div style="display: flex; gap: 20px; align-items: flex-start;">' +
                     '<div id="logoContainer" style="flex-shrink: 0; display: none;">' +
-                        '<img id="eventLogo" src="' + logoUrl + '" alt="Event Logo" style="max-width: 150px; height: auto;" ' +
-                        'onload="document.getElementById(\'logoContainer\').style.display=\'block\';" ' +
-                        'onerror="this.parentElement.remove();">' +
+                        '<img id="eventLogo" alt="Event Logo" style="max-width: 150px; height: auto;">' +
                     '</div>' +
                     '<div>' +
                         '<h4 style="margin-top: 0;">' + data.event.name + '</h4>' +
@@ -1893,6 +1948,39 @@ if ($decoded && isset($decoded->payload->target)) {
                 '</div>';
                 
                 $('#eventInfo').html(htmlContent);
+                
+                // Fonction pour essayer de charger une image
+                function tryLoadImage(url, onSuccess, onError) {
+                    var img = new Image();
+                    img.onload = function() {
+                        onSuccess(url);
+                    };
+                    img.onerror = onError;
+                    img.src = url;
+                }
+                
+                // Essayer d'abord le JPG
+                tryLoadImage(logoUrlJpg, 
+                    function(url) {
+                        // JPG trouvé
+                        $('#eventLogo').attr('src', url);
+                        $('#logoContainer').show();
+                    },
+                    function() {
+                        // JPG non trouvé, essayer PNG
+                        tryLoadImage(logoUrlPng,
+                            function(url) {
+                                // PNG trouvé
+                                $('#eventLogo').attr('src', url);
+                                $('#logoContainer').show();
+                            },
+                            function() {
+                                // Aucun logo trouvé, supprimer le conteneur
+                                $('#logoContainer').remove();
+                            }
+                        );
+                    }
+                );
                             
                 const tbody = $('#classesTableBody');
                 tbody.empty();
@@ -2072,6 +2160,19 @@ if ($decoded && isset($decoded->payload->target)) {
                 importOptions.startlists = currentSelections.some(s => s.import_startlist);
                 importOptions.results = currentSelections.some(s => s.import_results);
                 
+                // Ajouter le spinner pour l'import des classes
+                if (importOptions.classes) {
+                    $('#importProgress').append(
+                        '<div class="progress-section" id="classesImportSection">' +
+                        '<h5>Importing Classes</h5>' +
+                        '<div class="text-center">' +
+                        '<i class="fa fa-spinner fa-spin fa-2x text-primary"></i>' +
+                        '<p>Processing classes import...</p>' +
+                        '</div>' +
+                        '</div>'
+                    );
+                }
+                
                 $.ajax({
                     url: window.location.href,
                     type: 'POST',
@@ -2085,9 +2186,13 @@ if ($decoded && isset($decoded->payload->target)) {
                     dataType: 'json',
                     success: function(response) {
                         if (response.success) {
+                            // Remplacer le spinner par les résultats
+                            if (importOptions.classes) {
+                                $('#classesImportSection').remove();
+                            }
                             displayImportResults(response);
                             
-                            // Collecter toutes les startlists à traiter (même si pas de classes importées)
+                            // Collecter toutes les startlists à traiter
                             const allStartlistsToProcess = [];
                             const allResultsToProcess = [];
                             
@@ -2124,6 +2229,7 @@ if ($decoded && isset($decoded->payload->target)) {
                         }
                     },
                     error: function(xhr, status, error) {
+                        $('#classesImportSection').remove();
                         $('#importProgress').html('<p class="alert alert-danger">Request failed: ' + error + '</p>');
                     }
                 });
@@ -2148,37 +2254,61 @@ if ($decoded && isset($decoded->payload->target)) {
             }
             
             // Traiter les startlists
-                function processStartlists(eventId, startlistsToProcess) {
-                    $('#importProgress').append('<div class="progress-section"><h5>Processing Startlists...</h5><div id="startlistProgress"></div></div>');
-                    
-                    // Ajouter l'information is_team depuis les sélections originales
-                    const startlistsWithTeamInfo = startlistsToProcess.map(function(startlist) {
-                        // Retrouver la sélection originale pour cette compétition
-                        const originalSelection = currentSelections.find(s => s.class_id == startlist.foreign_id);
-                        return {
-                            ...startlist,
-                            is_team: originalSelection ? originalSelection.team_class : false
-                        };
-                    });
-                    
-                    $.ajax({
-                        url: window.location.href,
-                        type: 'POST',
-                        data: {
-                            action: 'import_startlists',
-                            event_id: eventId,
-                            competitions: JSON.stringify(startlistsWithTeamInfo), // Utiliser la version avec is_team
-                            api_key: '<?php echo $decoded->api_key ?? ''; ?>',
-                            meeting_url: '<?php echo $decoded->payload->meeting_url ?? ''; ?>'
-                        },
+            function processStartlists(eventId, startlistsToProcess) {
+                // Ajouter le spinner pour les startlists
+                $('#importProgress').append(
+                    '<div class="progress-section" id="startlistsSection">' +
+                    '<h5>Processing Startlists</h5>' +
+                    '<div class="text-center" id="startlistSpinner">' +
+                    '<i class="fa fa-spinner fa-spin fa-2x text-primary"></i>' +
+                    '<p>Fetching startlists data from Hippodata...</p>' +
+                    '</div>' +
+                    '<div id="startlistProgress" style="display: none;"></div>' +
+                    '</div>'
+                );
+                
+                // Ajouter l'information is_team depuis les sélections originales
+                const startlistsWithTeamInfo = startlistsToProcess.map(function(startlist) {
+                    const originalSelection = currentSelections.find(s => s.class_id == startlist.foreign_id);
+                    return {
+                        ...startlist,
+                        is_team: originalSelection ? originalSelection.team_class : false
+                    };
+                });
+                
+                $.ajax({
+                    url: window.location.href,
+                    type: 'POST',
+                    data: {
+                        action: 'import_startlists',
+                        event_id: eventId,
+                        competitions: JSON.stringify(startlistsWithTeamInfo),
+                        api_key: '<?php echo $decoded->api_key ?? ''; ?>',
+                        meeting_url: '<?php echo $decoded->payload->meeting_url ?? ''; ?>'
+                    },
                     dataType: 'json',
                     success: function(response) {
+                        // Masquer le spinner et afficher les résultats
+                        $('#startlistSpinner').hide();
+                        $('#startlistProgress').show();
+                        
                         if (response.success) {
                             displayStartlistResults(response);
                             
                             // Si on a des données à envoyer vers Equipe
                             if (response.batchData && response.batchData.length > 0) {
+                                // Ajouter un spinner pour l'envoi vers Equipe
+                                $('#startlistProgress').prepend(
+                                    '<div class="text-center" id="startlistEquipeSpinner">' +
+                                    '<i class="fa fa-spinner fa-spin fa-2x text-primary"></i>' +
+                                    '<p>Sending data to Equipe...</p>' +
+                                    '</div>'
+                                );
+                                
                                 importBatchesToEquipe(response.batchData, function() {
+                                    // Masquer le spinner d'envoi
+                                    $('#startlistEquipeSpinner').remove();
+                                    
                                     // Après les startlists, traiter les résultats si nécessaire
                                     if (importOptions.results) {
                                         const resultsToProcess = currentSelections
@@ -2203,7 +2333,8 @@ if ($decoded && isset($decoded->payload->target)) {
                         }
                     },
                     error: function(xhr, status, error) {
-                        $('#startlistProgress').html('<p class="alert alert-danger">Request failed: ' + error + '</p>');
+                        $('#startlistSpinner').hide();
+                        $('#startlistProgress').show().html('<p class="alert alert-danger">Request failed: ' + error + '</p>');
                     }
                 });
             }
@@ -2231,33 +2362,56 @@ if ($decoded && isset($decoded->payload->target)) {
             
             // Traiter les résultats
             function processResults(eventId, resultsToProcess) {
-                $('#importProgress').append('<div class="progress-section"><h5>Processing Results...</h5><div id="resultsProgress"></div></div>');
+                // Ajouter le spinner pour les résultats
+                $('#importProgress').append(
+                    '<div class="progress-section" id="resultsSection">' +
+                    '<h5>Processing Results</h5>' +
+                    '<div class="text-center" id="resultsSpinner">' +
+                    '<i class="fa fa-spinner fa-spin fa-2x text-primary"></i>' +
+                    '<p>Fetching results data from Hippodata...</p>' +
+                    '</div>' +
+                    '<div id="resultsProgress" style="display: none;"></div>' +
+                    '</div>'
+                );
+                
                 // Ajouter l'information is_team depuis les sélections originales
                 const resultsWithTeamInfo = resultsToProcess.map(function(result) {
-                    // Retrouver la sélection originale pour cette compétition
                     const originalSelection = currentSelections.find(s => s.class_id == result.foreign_id);
                     return {
                         ...result,
                         is_team: originalSelection ? originalSelection.team_class : false
                     };
                 });
+                
                 $.ajax({
                     url: window.location.href,
                     type: 'POST',
                     data: {
                         action: 'import_results',
                         event_id: eventId,
-                        competitions: JSON.stringify(resultsWithTeamInfo), // Utiliser la version avec is_team
+                        competitions: JSON.stringify(resultsWithTeamInfo),
                         api_key: '<?php echo $decoded->api_key ?? ''; ?>',
                         meeting_url: '<?php echo $decoded->payload->meeting_url ?? ''; ?>'
                     },
                     dataType: 'json',
                     success: function(response) {
+                        // Masquer le spinner et afficher les résultats
+                        $('#resultsSpinner').hide();
+                        $('#resultsProgress').show();
+                        
                         if (response.success) {
                             displayResultsProgress(response);
                             
                             // Si on a des données à envoyer vers Equipe
                             if (response.batchData && response.batchData.length > 0) {
+                                // Ajouter un spinner pour l'envoi vers Equipe
+                                $('#resultsProgress').prepend(
+                                    '<div class="text-center" id="resultsEquipeSpinner">' +
+                                    '<i class="fa fa-spinner fa-spin fa-2x text-primary"></i>' +
+                                    '<p>Sending results to Equipe...</p>' +
+                                    '</div>'
+                                );
+                                
                                 importResultsBatchesToEquipe(response.batchData);
                             }
                         } else {
@@ -2265,7 +2419,8 @@ if ($decoded && isset($decoded->payload->target)) {
                         }
                     },
                     error: function(xhr, status, error) {
-                        $('#resultsProgress').html('<p class="alert alert-danger">Request failed: ' + error + '</p>');
+                        $('#resultsSpinner').hide();
+                        $('#resultsProgress').show().html('<p class="alert alert-danger">Request failed: ' + error + '</p>');
                     }
                 });
             }
@@ -2561,11 +2716,15 @@ if ($decoded && isset($decoded->payload->target)) {
                 
                 function checkComplete() {
                     if (processed === total) {
+                        // Masquer le spinner des résultats
+                        $('#resultsEquipeSpinner').remove();
+                        
                         // Afficher le résumé final
                         showFinalSummary();
                     }
                 }
             }
+
             
             // Afficher le résumé final
             function showFinalSummary() {
