@@ -1128,6 +1128,118 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                     }
                 }
                 
+                // Pour les compétitions par équipe, analyser les résultats par nation pour déterminer les cavaliers exclus
+                $ridersByNation = [];
+                $ridersToSkip = [];
+                
+                if ($isTeamCompetition) {
+                    if ($debugMode) {
+                        error_log("=== TEAM COMPETITION ANALYSIS FOR " . $comp['name'] . " ===");
+                        error_log("Competition Foreign ID: " . $competitionForeignId);
+                        error_log("Total competitors: " . count($competitors));
+                    }
+                    // D'abord, regrouper les cavaliers par nation et analyser leurs rounds
+                    foreach ($competitors as $competitor) {
+                        $rider = $competitor['RIDER'] ?? [];
+                        $nation = $rider['NATION'] ?? '';
+                        if ($debugMode && $idx < 5) { // Log les 5 premiers pour debug
+                            error_log("Competitor $idx:");
+                            error_log("  - RIDER data: " . json_encode($rider));
+                            error_log("  - Nation found: '" . $nation . "'");
+                        }
+                        if ($nation) {
+                            $riderFeiId = $rider['RFEI_ID'] ?? null;
+                            $horseFeiId = $competitor['HORSE']['HFEI_ID'] ?? null;
+                            $resultDetails = $competitor['RESULT'] ?? [];
+                            
+                            // Vérifier quels rounds ce cavalier a fait
+                            $hasRound2 = false;
+                            $hasRound3 = false;
+                            foreach ($resultDetails as $roundResult) {
+                                $roundNum = $roundResult['ROUND'] ?? 0;
+                                if ($roundNum == 2) {
+                                    $hasRound2 = true;
+                                } elseif ($roundNum == 3) {
+                                    $hasRound3 = true;
+                                }
+                            }
+                            
+                            if (!isset($ridersByNation[$nation])) {
+                                $ridersByNation[$nation] = [];
+                            }
+                            
+                            $ridersByNation[$nation][] = [
+                                'rider_fei_id' => $riderFeiId,
+                                'horse_fei_id' => $horseFeiId,
+                                'has_round2' => $hasRound2,
+                                'has_round3' => $hasRound3,
+                                'foreign_id' => $riderFeiId . '_' . $horseFeiId . '_' . $competitionForeignId
+                            ];
+                        }
+                    }
+                    
+                    // Pour chaque nation, déterminer qui doit avoir skip_rounds
+                    foreach ($ridersByNation as $nation => $riders) {
+                        if ($debugMode) {
+                            error_log("Nation '$nation' has " . count($riders) . " riders:");
+                            foreach ($riders as $r) {
+                                error_log("  - Rider " . $r['rider_fei_id'] . " - Round2: " . ($r['has_round2'] ? 'YES' : 'NO') . " - Round3: " . ($r['has_round3'] ? 'YES' : 'NO'));
+                            }
+                        }
+                        if (count($riders) >= 4) {
+                            // Compter combien ont un round 2
+                            $ridersWithRound2 = array_filter($riders, function($r) {
+                                return $r['has_round2'];
+                            });
+                            
+                            // Si exactement 3 ont un round 2, le 4e doit avoir skip_rounds[2]
+                            if (count($ridersWithRound2) == 3) {
+                                foreach ($riders as $rider) {
+                                    if (!$rider['has_round2'] && $rider['foreign_id']) {
+                                        if (!isset($ridersToSkip[$rider['foreign_id']])) {
+                                            $ridersToSkip[$rider['foreign_id']] = [];
+                                        }
+                                        $ridersToSkip[$rider['foreign_id']][] = 2;
+                                    }
+                                }
+                            }
+                            
+                            // Vérifier s'il y a un round 3 (barrage)
+                            $ridersWithRound3 = array_filter($riders, function($r) {
+                                return $r['has_round3'];
+                            });
+                            // Si au moins un cavalier a fait le round 3 ET qu'il y a plusieurs cavaliers dans l'équipe
+                            if (count($ridersWithRound3) > 0 && count($ridersWithRound3) < count($riders)) {
+                                if ($debugMode) {
+                                    error_log("Round 3 detected: " . count($ridersWithRound3) . " riders participated out of " . count($riders));
+                                }
+                                
+                                // Si seulement 1 cavalier a fait le round 3, les autres doivent avoir skip_rounds[3]
+                                if (count($ridersWithRound3) == 1) {
+                                    foreach ($riders as $rider) {
+                                        if (!$rider['has_round3'] && $rider['foreign_id']) {
+                                            if (!isset($ridersToSkip[$rider['foreign_id']])) {
+                                                $ridersToSkip[$rider['foreign_id']] = [];
+                                            }
+                                            // Ajouter 3 seulement s'il n'est pas déjà présent
+                                            if (!in_array(3, $ridersToSkip[$rider['foreign_id']])) {
+                                                $ridersToSkip[$rider['foreign_id']][] = 3;
+                                            }
+                                        }
+                                    }
+                                }
+                            } else if (count($ridersWithRound3) == 0 && $debugMode) {
+                                error_log("No round 3 detected for team '$nation' - no skip_rounds[3] needed");
+                            }
+                   
+                        }
+                    }
+                    
+                    if ($debugMode && count($ridersToSkip) > 0) {
+                        error_log("Riders with skip rounds: " . json_encode($ridersToSkip));
+                    }
+                }
+                
                 foreach ($competitors as $competitor) {
                     $rider = $competitor['RIDER'] ?? [];
                     $horse = $competitor['HORSE'] ?? [];
@@ -1150,6 +1262,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                         'k' => 'H',
                         'av' => 'A'
                     ];
+                    
+                    // Pour les compétitions par équipe, vérifier si ce cavalier doit skipper des rounds
+                    if ($isTeamCompetition && isset($ridersToSkip[$result['foreign_id']])) {
+                        $skipRounds = $ridersToSkip[$result['foreign_id']];
+                        sort($skipRounds); // S'assurer que les rounds sont dans l'ordre
+                        $result['skip_rounds'] = $skipRounds;  // Tableau d'entiers
+                        if ($debugMode) {
+                            error_log("Adding skip_rounds " . json_encode($skipRounds) . " for rider: " . $result['foreign_id']);
+                        }
+                    }
                     
                     // Traiter les résultats par round
                     $resultDetails = $competitor['RESULT'] ?? [];
@@ -1928,7 +2050,8 @@ if ($decoded && isset($decoded->payload->target)) {
                                             .map(s => ({
                                                 foreign_id: s.class_id,
                                                 class_id: s.class_nr,
-                                                name: s.class_name
+                                                name: s.class_name,
+                                                is_team: s.team_class
                                             }));
                                         
                                         if (resultsToProcess.length > 0) {
@@ -1973,14 +2096,22 @@ if ($decoded && isset($decoded->payload->target)) {
             // Traiter les résultats
             function processResults(eventId, resultsToProcess) {
                 $('#importProgress').append('<div class="progress-section"><h5>Processing Results...</h5><div id="resultsProgress"></div></div>');
-                
+                // Ajouter l'information is_team depuis les sélections originales
+                const resultsWithTeamInfo = resultsToProcess.map(function(result) {
+                    // Retrouver la sélection originale pour cette compétition
+                    const originalSelection = currentSelections.find(s => s.class_id == result.foreign_id);
+                    return {
+                        ...result,
+                        is_team: originalSelection ? originalSelection.team_class : false
+                    };
+                });
                 $.ajax({
                     url: window.location.href,
                     type: 'POST',
                     data: {
                         action: 'import_results',
                         event_id: eventId,
-                        competitions: JSON.stringify(resultsToProcess),
+                        competitions: JSON.stringify(resultsWithTeamInfo), // Utiliser la version avec is_team
                         api_key: '<?php echo $decoded->api_key ?? ''; ?>',
                         meeting_url: '<?php echo $decoded->payload->meeting_url ?? ''; ?>'
                     },
