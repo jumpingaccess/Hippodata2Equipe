@@ -1575,7 +1575,8 @@ if ($decoded && isset($decoded->payload->target)) {
 </head>
 <body class="extension">
     <div class="import-container">
-        <h3>Import from Hippodata</h3>
+        <h3 style="display: inline-block; margin-right: 10px;">Import from Hippodata</h3>
+        <span class="label label-success">v<?php echo $_ENV['VERSION'];?></span>
         
         <div id="alertMessage" style="display: none;"></div>
         
@@ -1755,14 +1756,28 @@ if ($decoded && isset($decoded->payload->target)) {
             });
             
             // Afficher les infos de l'event
-            // Afficher les infos de l'event
+
             function displayEventInfo(data) {
-                $('#eventInfo').html(
-                    '<h4>' + data.event.name + '</h4>' +
-                    '<p><strong>Event ID:</strong> ' + data.event.id + '</p>' +
-                    '<p><strong>Venue:</strong> ' + data.event.venue + '</p>'
-                );
+                // Construire l'URL du logo
+                var currentYear = new Date().getFullYear();
+                var logoUrl = 'https://results.hippodata.de/' + currentYear + '/' + data.event.id + '/evt_logo.jpg';
                 
+                // Créer le HTML avec le logo (caché par défaut)
+                var htmlContent = '<div style="display: flex; gap: 20px; align-items: flex-start;">' +
+                    '<div id="logoContainer" style="flex-shrink: 0; display: none;">' +
+                        '<img id="eventLogo" src="' + logoUrl + '" alt="Event Logo" style="max-width: 150px; height: auto;" ' +
+                        'onload="document.getElementById(\'logoContainer\').style.display=\'block\';" ' +
+                        'onerror="this.parentElement.remove();">' +
+                    '</div>' +
+                    '<div>' +
+                        '<h4 style="margin-top: 0;">' + data.event.name + '</h4>' +
+                        '<p><strong>Event ID:</strong> ' + data.event.id + '</p>' +
+                        '<p><strong>Venue:</strong> ' + data.event.venue + '</p>' +
+                    '</div>' +
+                '</div>';
+                
+                $('#eventInfo').html(htmlContent);
+                            
                 const tbody = $('#classesTableBody');
                 tbody.empty();
                 
@@ -1791,10 +1806,15 @@ if ($decoded && isset($decoded->payload->target)) {
                             const isClassImported = imported.classes.includes(foreignId);
                             const isStartlistImported = imported.startlists.includes(foreignId);
                             const isResultImported = imported.results.includes(foreignId);
-                            const teamIndicator = cls.name.toLowerCase().includes('team') ? ' 🏆' : '';
                             
+                            const classNameLower = cls.name.toLowerCase();
+                            const teamKeywords = ['team', 'lln', 'nations cup', 'equipe', 'teams'];
+                            const isTeamInName = teamKeywords.some(keyword => classNameLower.includes(keyword));
+                            const teamIndicator = isTeamInName ? '<img src="R.webp" width="45">' : '';
+
                             row.append('<td>' + cls.nr + ' ' + cls.name + teamIndicator + '</td>');
                             row.append('<td>' + cls.date + '</td>');
+
                             var hasTeamStarts = false;
                             if (isTeamClass && existingData.teamStarts && existingData.teamStarts.indexOf(cls.id) !== -1) {
                                 hasTeamStarts = true;
@@ -1818,7 +1838,7 @@ if ($decoded && isset($decoded->payload->target)) {
                                 (!isClassImported ? 'title="Import class first"' : '') + '>') + '</td>');
                             
                             // Team class - toujours disponible
-                            row.append('<td><input type="checkbox" class="team-class" data-class-id="' + cls.id + '" data-index="' + index + '"></td>');
+                            row.append('<td><input type="checkbox" class="team-class" data-class-id="' + cls.id + '" data-index="' + index + '"' + (isTeamInName ? ' checked' : '') + '></td>');
                             
                             // FEI Article - toujours disponible
                             row.append('<td><select class="fei-article" data-class-id="' + cls.id + '" data-index="' + index + '">' + $('#selectAllArticle').html() + '</select></td>');
