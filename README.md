@@ -208,11 +208,7 @@ This project is developed for Equipe integration with the agreement of Hippodata
 - ✅ Country name mapping
 
 ### Roadmap
-- [ ] Bulk event import
-- [ ] Schedule synchronization
-- [ ] Live result updates
-- [ ] Export functionality
+- [ ] FEI Articles Management
+
 
 ---
-
-**Note**: Choose the implementation that best fits your infrastructure and requirements. Both versions are actively maintained and provide identical functionality.
