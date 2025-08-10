@@ -1,0 +1,863 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Extension Equipe - Hippodata</title>
+    <link rel="stylesheet" href="<%= @decoded.dig('payload', 'style_url') || '' %>">
+    <%= stylesheet_link_tag 'custom', 'data-turbo-track': 'reload' %>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
+</head>
+<body class="extension">
+    <div class="import-container">
+        <h3>Import from Hippodata</h3>
+        
+        <div id="alertMessage" style="display: none;"></div>
+        
+        <!-- Step 1: Search Event -->
+        <div id="searchStep">
+            <form id="searchForm">
+                <div class="form-group">
+                    <label for="showId">Show ID (FEI Event ID):</label>
+                    <input type="text" id="showId" name="show_id" class="form-control" placeholder="Enter FEI Event ID" required>
+                </div>
+                
+                <button type="submit" class="btn btn-primary" id="searchButton">
+                    Search Event
+                </button>
+            </form>
+        </div>
+        
+        <!-- Step 2: Selection -->
+        <div id="selectionStep" style="display: none;">
+            <div id="eventInfo"></div>
+            <div id="loading-status" class="text-center my-3" style="display: none;">
+                <i class="fa fa-spinner fa-spin fa-2x text-primary"></i>
+                <p>Checking import status...</p>
+            </div>
+            <table class="classes-table" id="classesTable">
+                <thead>
+                    <tr>
+                        <th>Class</th>
+                        <th>Date</th>
+                        <th>Class Import</th>
+                        <th>Startlist Import</th>
+                        <th>Result Import</th>
+                        <th>Team Class</th>
+                        <th>FEI Article</th>
+                    </tr>
+                    <tr class="select-all-row">
+                        <td colspan="2">Select All →</td>
+                        <td><input type="checkbox" id="selectAllClasses"></td>
+                        <td><input type="checkbox" id="selectAllStartlists"></td>
+                        <td><input type="checkbox" id="selectAllResults"></td>
+                        <td><input type="checkbox" id="selectAllTeam"></td>
+                        <td>
+                            <select id="selectAllArticle">
+                                <option value="">-- Select --</option>
+                                <option style="background: #2980b9; color: #ffffff;" disabled>238.1</option>
+                                <option value="238.1.1">Table A. Not against the clock (238.1.1)</option>
+                                <option value="238.1.1">Table A. Not against the clock with jump off not atc (238.1.1)</option>
+                                <option value="238.1.2">Table A. One round not atc with one jump-off atc (238.1.2)</option>
+                                <option value="238.1.3">Table A. Not against the clock with jump off (238.1.3)</option>
+                                <option value="238.1.3">Table A. One round with two jump-offs (238.1.3)</option>
+                                <option style="background: #2980b9; color: #ffffff;" disabled>238.2</option>
+                                <option value="238.2.1">Table A. Against the clock, no jump off (238.2.1)</option>
+                                <option value="238.2.1b">Table A. One round against the clock equalty of faults and time jump off (238.2.1b)</option>
+                                <option value="238.2.2">Table A. One round with one jump off (238.2.2)</option>
+                                <option value="238.2.2 + 245.3">Table A against the clock with Immediate jump off (238.2.2 + 245.3)</option>
+                                <option value="238.2.3">Table A. One round with two jump-offs (238.2.3)</option>
+                                <option style="background: #2980b9; color: #ffffff;" disabled>other</option>
+                                <option value="239">Table C. Against the clock (239)</option>
+                                <option value="262.2, 262.3">Five rounds, not atc (262.2, 262.3)</option>
+                                <option value="263">Table C. Against the clock (263)</option>
+                                <option value="266">Fault and Out (266)</option>
+                                <option value="267">Hit and Hurry (267)</option>
+                                <option value="268.2.1">Relay competition - Table C (268.2.1)</option>
+                                <option value="269">Accumulator against the clock (269)</option>
+                                <option value="269.4">Accumulator with a jump off (269.4)</option>
+                                <option value="270">Top score competition (270)</option>
+                                <option value="271">Take-your-own-line (271)</option>
+                                <option value="275">Competition in groups against the clock (275)</option>
+                                <option style="background: #2980b9; color: #ffffff;" disabled>2 Rounds</option>
+                                <option value="273.3.1, 4.1">Table A. 1st round against the clock - 2nd round not against the clock, jump off against the clock (273.3.1, 4.1)</option>
+                                <option value="273.3.2, 4.2">Table A. Two rounds not against the clock, jump off (273.3.2, 4.2)</option>
+                                <option value="273.3.3.1">Table A. Two rounds, both against the clock (273.3.3.1)</option>
+                                <option value="273.3.4.1">Table A. Two rounds, both against the clock, with jump-off (273.3.4.1)</option>
+                                <option value="273.4.3a">Table A. Two rounds, 2nd round against the clock (273.4.3a)</option>
+                                <option value="273.4.3b">Table A. Two rounds, both against the clock (273.4.3b)</option>
+                                <option value="273.4.4">Table A. Two rounds aggregated, with jump off atc (273.4.4)</option>
+                                <option value="276.1">Two rounds and a Winning Round (276.1)</option>
+                                <option value="276.2">One round and a winning round with 0 points (276.2)</option>
+                                <option value="276.3">One round and a winning round (276.3)</option>
+                                <option style="background: #2980b9; color: #ffffff;" disabled>2 Phases</option>
+                                <option value="274.1.5.1">Table A. Two phases not against the clock (274.1.5.1)</option>
+                                <option value="274.1.5.2">Table A. Two phases, the second against the clock (274.1.5.2)</option>
+                                <option value="274.1.5.3">Table A. Two phases, both against the clock (274.1.5.3)</option>
+                                <option value="274.1.5.4">Table A and C. Two phases. First phase not atc and second atc (274.1.5.4)</option>
+                                <option value="274.2.5">Special Two Phase Competition (274.2.5)</option>
+                                <option value="282.4.5">Table A. Two phases. Against the clock and table C (282.4.5)</option>
+                                <option style="background: #2980b9; color: #ffffff;" disabled>Nations Cup / Team Class</option>
+                                <option value="264.10.2">Nations Cup (264.10.2)</option>
+                                <option value="264.10.3">Nations Cup (264.10.3)</option>
+                                <option value="264.10.3">Nations Cup (1 round against the clock) (264.10.3)</option>
+                                <option value="264.10.3">Nations Cup (1 round against the clock and jump-off -all riders) (264.10.3)</option>
+                                <option value="264.10.4">Nations Cup (order 2nd round based on penalties only) (264.10.4)</option>
+                                <option value="264.10.7">Nations Cup (264.1.7)</option>
+                                <option value="265.2+273.3.3.2">Other Team Competition - two rounds without a jump-off (265.2+273.3.3.2)</option>
+                            </select>
+                        </td>
+                    </tr>
+                </thead>
+                <tbody id="classesTableBody">
+                    <!-- Classes will be populated here -->
+                </tbody>
+            </table>
+            
+            <div class="action-buttons">
+                <button type="button" class="btn btn-secondary" id="backButton">Back</button>
+                <button type="button" class="btn btn-primary" id="importSelectedButton">Import Selected</button>
+            </div>
+        </div>
+        
+        <!-- Step 3: Results -->
+        <div id="resultsStep" style="display: none;">
+            <h4>Import Progress</h4>
+            <div id="importProgress"></div>
+            
+            <div class="action-buttons">
+                <button type="button" class="btn btn-primary" id="newImportButton">New Import</button>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        const debugMode = <%= @debug_mode ? 'true' : 'false' %>;
+        const apiKey = '<%= @decoded.dig('api_key') || '' %>';
+        const meetingUrl = '<%= @decoded.dig('payload', 'meeting_url') || '' %>';
+        let currentEventData = null;
+        let currentSelections = [];
+        let importOptions = {
+            classes: false,
+            startlists: false,
+            results: false
+        };
+        
+        function debugLog(...args) {
+            if (debugMode) {
+                console.log(...args);
+            }
+        }
+        
+        $(document).ready(function() {
+            // Search for event
+            $('#searchForm').on('submit', function(e) {
+                e.preventDefault();
+                
+                const showId = $('#showId').val();
+                const button = $('#searchButton');
+                const alertDiv = $('#alertMessage');
+                
+                alertDiv.hide();
+                button.prop('disabled', true).text('Searching...');
+                
+                $.ajax({
+                    url: '/api/v1/imports/fetch_event_info',
+                    type: 'POST',
+                    data: {
+                        show_id: showId
+                    },
+                    dataType: 'json',
+                    success: function(response) {
+                        if (response.success) {
+                            currentEventData = response;
+                            displayEventInfo(response);
+                            $('#searchStep').hide();
+                            $('#selectionStep').show();
+                        } else {
+                            alertDiv.removeClass('alert-success').addClass('alert alert-danger');
+                            alertDiv.text('Error: ' + response.error).show();
+                        }
+                    },
+                    error: function(xhr, status, error) {
+                        alertDiv.removeClass('alert-success').addClass('alert alert-danger');
+                        alertDiv.text('Request failed: ' + error).show();
+                    },
+                    complete: function() {
+                        button.prop('disabled', false).text('Search Event');
+                    }
+                });
+            });
+            
+            // Display event info
+            function displayEventInfo(data) {
+                $('#eventInfo').html(
+                    '<h4>' + data.event.name + '</h4>' +
+                    '<p><strong>Event ID:</strong> ' + data.event.id + '</p>' +
+                    '<p><strong>Venue:</strong> ' + data.event.venue + '</p>'
+                );
+                
+                const tbody = $('#classesTableBody');
+                tbody.empty();
+                
+                // Show loading spinner
+                $('#loading-status').show();
+                
+                // Check import status
+                $.ajax({
+                    url: '/api/v1/imports/get_imported_status',
+                    type: 'POST',
+                    data: {
+                        meeting_url: meetingUrl,
+                        api_key: apiKey
+                    },
+                    dataType: 'json',
+                    success: function(response) {
+                        const imported = response.existing || { classes: [], startlists: [], results: [] };
+                        
+                        data.classes.forEach(function(cls, index) {
+                            const row = $('<tr>');
+                            const foreignId = cls.id.toString();
+                            var isTeamClass = cls.TEAM_CLASS === "true" || cls.TEAM_CLASS === true;
+                            
+                            // Check if already imported
+                            const isClassImported = imported.classes.includes(foreignId);
+                            const isStartlistImported = imported.startlists.includes(foreignId);
+                            const isResultImported = imported.results.includes(foreignId);
+                            const teamIndicator = cls.name.toLowerCase().includes('team') ? ' 🏆' : '';
+                            
+                            row.append('<td>' + cls.nr + ' ' + cls.name + teamIndicator + '</td>');
+                            row.append('<td>' + cls.date + '</td>');
+                            
+                            // Class import
+                            row.append('<td>' + (isClassImported ? 
+                                '<i class="fa-solid fa-circle-check fa-lg" style="color:rgb(24, 141, 8);" title="Already imported"></i>' : 
+                                '<input type="checkbox" class="class-import" data-class-id="' + cls.id + '" data-index="' + index + '">') + '</td>');
+                            
+                            // Startlist import
+                            row.append('<td>' + (isStartlistImported ? 
+                                '<i class="fa-solid fa-circle-check fa-lg" style="color: rgb(24, 141, 8);" title="Already imported"></i>' : 
+                                '<input type="checkbox" class="startlist-import" data-class-id="' + cls.id + '" data-index="' + index + '" ' + 
+                                (!isClassImported ? 'title="Import class first"' : '') + '>') + '</td>');
+
+                            // Result import
+                            row.append('<td>' + (isResultImported ? 
+                                '<i class="fa-solid fa-circle-check fa-lg" style="color: rgb(24, 141, 8);" title="Already imported"></i>' : 
+                                '<input type="checkbox" class="result-import" data-class-id="' + cls.id + '" data-index="' + index + '" ' + 
+                                (!isClassImported ? 'title="Import class first"' : '') + '>') + '</td>');
+                            
+                            // Team class
+                            row.append('<td><input type="checkbox" class="team-class" data-class-id="' + cls.id + '" data-index="' + index + '"></td>');
+                            
+                            // FEI Article
+                            row.append('<td><select class="fei-article" data-class-id="' + cls.id + '" data-index="' + index + '">' + $('#selectAllArticle').html() + '</select></td>');
+                            
+                            tbody.append(row);
+                        });
+                    },
+                    error: function() {
+                        // On error, display without status
+                        data.classes.forEach(function(cls, index) {
+                            const row = $('<tr>');
+                            
+                            row.append('<td>' + cls.nr + ' ' + cls.name + '</td>');
+                            row.append('<td>' + cls.date + '</td>');
+                            row.append('<td><input type="checkbox" class="class-import" data-class-id="' + cls.id + '" data-index="' + index + '"></td>');
+                            row.append('<td><input type="checkbox" class="startlist-import" data-class-id="' + cls.id + '" data-index="' + index + '"></td>');
+                            row.append('<td><input type="checkbox" class="result-import" data-class-id="' + cls.id + '" data-index="' + index + '"></td>');
+                            row.append('<td><input type="checkbox" class="team-class" data-class-id="' + cls.id + '" data-index="' + index + '"></td>');
+                            row.append('<td><select class="fei-article" data-class-id="' + cls.id + '" data-index="' + index + '">' + $('#selectAllArticle').html() + '</select></td>');
+                            
+                            tbody.append(row);
+                        });
+                    },
+                    complete: function() {
+                        // Hide spinner
+                        $('#loading-status').hide();
+                    }
+                });
+            }
+            
+            // Handle checkbox dependencies
+            $(document).on('change', '.class-import', function() {
+                const classId = $(this).data('class-id');
+                const isChecked = $(this).is(':checked');
+                const row = $(this).closest('tr');
+                
+                // If unchecking class, uncheck startlist and results too
+                if (!isChecked) {
+                    row.find('.startlist-import, .result-import').prop('checked', false);
+                }
+            });
+            
+            // Select all handlers
+            $('#selectAllClasses').on('change', function() {
+                $('.class-import').prop('checked', $(this).is(':checked'));
+            });
+            
+            $('#selectAllStartlists').on('change', function() {
+                $('.startlist-import').prop('checked', $(this).is(':checked'));
+            });
+            
+            $('#selectAllResults').on('change', function() {
+                $('.result-import').prop('checked', $(this).is(':checked'));
+            });
+            
+            $('#selectAllTeam').on('change', function() {
+                $('.team-class').prop('checked', $(this).is(':checked'));
+            });
+            
+            $('#selectAllArticle').on('change', function() {
+                $('.fei-article').val($(this).val());
+            });
+            
+            // Back button
+            $('#backButton').on('click', function() {
+                $('#selectionStep').hide();
+                $('#searchStep').show();
+            });
+            
+            // Import selected
+            $('#importSelectedButton').on('click', function() {
+                const selections = [];
+                
+                $('#classesTableBody tr').each(function(index) {
+                    const row = $(this);
+                    const classData = currentEventData.classes[index];
+                    
+                    // Check if checkboxes exist (not replaced by checkmarks)
+                    const classCheckbox = row.find('.class-import');
+                    const startlistCheckbox = row.find('.startlist-import');
+                    const resultCheckbox = row.find('.result-import');
+                    
+                    const selection = {
+                        class_id: classData.id,
+                        class_nr: classData.nr,
+                        class_name: classData.name,
+                        import_class: classCheckbox.length > 0 && classCheckbox.is(':checked'),
+                        import_startlist: startlistCheckbox.length > 0 && startlistCheckbox.is(':checked'),
+                        import_results: resultCheckbox.length > 0 && resultCheckbox.is(':checked'),
+                        team_class: row.find('.team-class').is(':checked'),
+                        fei_article: row.find('.fei-article').val()
+                    };
+                    
+                    // Add only if at least one option is selected
+                    if (selection.import_class || selection.import_startlist || selection.import_results) {
+                        selections.push(selection);
+                    }
+                });
+                
+                if (selections.length === 0) {
+                    alert('Please select at least one import option');
+                    return;
+                }
+                
+                currentSelections = selections;
+                startImport();
+            });
+            
+            // Start import
+            function startImport() {
+                $('#selectionStep').hide();
+                $('#resultsStep').show();
+                $('#importProgress').html('<div class="progress-section"><p>Starting import process...</p></div>');
+                
+                // Determine what needs to be imported
+                importOptions.classes = currentSelections.some(s => s.import_class);
+                importOptions.startlists = currentSelections.some(s => s.import_startlist);
+                importOptions.results = currentSelections.some(s => s.import_results);
+                
+                $.ajax({
+                    url: '/api/v1/imports/import_selected',
+                    type: 'POST',
+                    data: {
+                        show_id: $('#showId').val(),
+                        selections: JSON.stringify(currentSelections),
+                        api_key: apiKey,
+                        meeting_url: meetingUrl
+                    },
+                    dataType: 'json',
+                    success: function(response) {
+                        if (response.success) {
+                            displayImportResults(response);
+                            
+                            // Collect all startlists to process
+                            const allStartlistsToProcess = [];
+                            const allResultsToProcess = [];
+                            
+                            currentSelections.forEach(function(sel) {
+                                if (sel.import_startlist) {
+                                    allStartlistsToProcess.push({
+                                        foreign_id: sel.class_id,
+                                        class_id: sel.class_nr,
+                                        name: sel.class_name,
+                                        is_team: sel.team_class
+                                    });
+                                }
+                                if (sel.import_results) {
+                                    allResultsToProcess.push({
+                                        foreign_id: sel.class_id,
+                                        class_id: sel.class_nr,
+                                        name: sel.class_name,
+                                        is_team: sel.team_class
+                                    });
+                                }
+                            });
+                            
+                            // Process startlists if any
+                            if (allStartlistsToProcess.length > 0) {
+                                setTimeout(function() {
+                                    processStartlists(response.event_id, allStartlistsToProcess);
+                                }, 1000);
+                            } else if (allResultsToProcess.length > 0) {
+                                // Process only results if no startlists
+                                setTimeout(function() {
+                                    processResults(response.event_id, allResultsToProcess);
+                                }, 1000);
+                            }
+                        } else {
+                            $('#importProgress').html('<p class="alert alert-danger">Error: ' + response.error + '</p>');
+                        }
+                    },
+                    error: function(xhr, status, error) {
+                        $('#importProgress').html('<p class="alert alert-danger">Request failed: ' + error + '</p>');
+                    }
+                });
+            }
+            
+            // Display import results
+            function displayImportResults(data) {
+                let html = '<div class="progress-section">';
+                
+                if (data.results.classes && data.results.classes.length > 0) {
+                    html += '<h5>Classes Import Results:</h5>';
+                    data.results.classes.forEach(function(cls) {
+                        const statusClass = cls.status === 'success' ? 'success' : 'failed';
+                        html += '<div class="progress-item ' + statusClass + '">';
+                        html += cls.name + ' - <strong>' + cls.status + '</strong>';
+                        html += '</div>';
+                    });
+                }
+                
+                html += '</div>';
+                $('#importProgress').html(html);
+            }
+            
+            // Process startlists
+            function processStartlists(eventId, startlistsToProcess) {
+                $('#importProgress').append('<div class="progress-section"><h5>Processing Startlists...</h5><div id="startlistProgress"></div></div>');
+                
+                $.ajax({
+                    url: '/api/v1/imports/import_startlists',
+                    type: 'POST',
+                    data: {
+                        event_id: eventId,
+                        competitions: JSON.stringify(startlistsToProcess),
+                        api_key: apiKey,
+                        meeting_url: meetingUrl
+                    },
+                    dataType: 'json',
+                    success: function(response) {
+                        if (response.success) {
+                            displayStartlistResults(response);
+                            
+                            // Send batches to Equipe
+                            if (response.batchData && response.batchData.length > 0) {
+                                importBatchesToEquipe(response.batchData, function() {
+                                    // After startlists, process results if needed
+                                    if (importOptions.results) {
+                                        const resultsToProcess = currentSelections
+                                            .filter(s => s.import_results)
+                                            .map(s => ({
+                                                foreign_id: s.class_id,
+                                                class_id: s.class_nr,
+                                                name: s.class_name,
+                                                is_team: s.team_class
+                                            }));
+                                        
+                                        if (resultsToProcess.length > 0) {
+                                            setTimeout(function() {
+                                                processResults(eventId, resultsToProcess);
+                                            }, 1000);
+                                        }
+                                    }
+                                });
+                            }
+                        } else {
+                            $('#startlistProgress').html('<p class="alert alert-danger">Error: ' + response.error + '</p>');
+                        }
+                    },
+                    error: function(xhr, status, error) {
+                        $('#startlistProgress').html('<p class="alert alert-danger">Request failed: ' + error + '</p>');
+                    }
+                });
+            }
+            
+            // Display startlist results
+            function displayStartlistResults(response) {
+                let html = '';
+                
+                if (response.processedCompetitions) {
+                    response.processedCompetitions.forEach(function(comp) {
+                        html += '<div class="progress-item pending" id="startlist-' + comp.foreign_id + '">';
+                        html += '<strong>' + comp.name + '</strong>: ';
+                        
+                        if (comp.is_team) {
+                            html += comp.teams_count + ' teams, ';
+                        }
+                        
+                        html += comp.people_count + ' riders, ' + comp.horses_count + ' horses, ' + comp.starts_count + ' starts';
+                        html += '</div>';
+                    });
+                }
+                
+                $('#startlistProgress').html(html);
+            }
+            
+            // Process results
+            function processResults(eventId, resultsToProcess) {
+                $('#importProgress').append('<div class="progress-section"><h5>Processing Results...</h5><div id="resultsProgress"></div></div>');
+                
+                $.ajax({
+                    url: '/api/v1/imports/import_results',
+                    type: 'POST',
+                    data: {
+                        event_id: eventId,
+                        competitions: JSON.stringify(resultsToProcess),
+                        api_key: apiKey,
+                        meeting_url: meetingUrl
+                    },
+                    dataType: 'json',
+                    success: function(response) {
+                        if (response.success) {
+                            displayResultsProgress(response);
+                            
+                            // Send batches to Equipe
+                            if (response.batchData && response.batchData.length > 0) {
+                                importResultsBatchesToEquipe(response.batchData);
+                            }
+                        } else {
+                            $('#resultsProgress').html('<p class="alert alert-danger">Error: ' + response.error + '</p>');
+                        }
+                    },
+                    error: function(xhr, status, error) {
+                        $('#resultsProgress').html('<p class="alert alert-danger">Request failed: ' + error + '</p>');
+                    }
+                });
+            }
+            
+            // Display results progress
+            function displayResultsProgress(response) {
+                let html = '';
+                
+                if (response.processedCompetitions) {
+                    response.processedCompetitions.forEach(function(comp) {
+                        html += '<div class="progress-item pending" id="result-' + comp.foreign_id + '">';
+                        html += '<strong>' + comp.name + '</strong>: ';
+                        html += comp.results_count + ' results';
+                        
+                        if (comp.time_allowed) {
+                            html += ' (Time allowed: ' + comp.time_allowed + 's)';
+                        }
+                        
+                        html += '</div>';
+                    });
+                }
+                
+                $('#resultsProgress').html(html);
+            }
+            
+            // Import batches to Equipe
+            function importBatchesToEquipe(batchDataArray, onCompleteCallback) {
+                const alertDiv = $('#alertMessage');
+                let importResults = [];
+                
+                // Consolidate all data
+                let allPeople = [];
+                let allHorses = [];
+                let allClubs = [];
+                let competitionStarts = [];
+                
+                // Collect all data
+                batchDataArray.forEach(function(batch) {
+                    if (batch.data.people && batch.data.people.records) {
+                        allPeople = allPeople.concat(batch.data.people.records);
+                    }
+                    if (batch.data.horses && batch.data.horses.records) {
+                        allHorses = allHorses.concat(batch.data.horses.records);
+                    }
+                    if (batch.data.clubs && batch.data.clubs.records) {
+                        allClubs = allClubs.concat(batch.data.clubs.records);
+                    }
+                    if (batch.data.starts) {
+                        competitionStarts.push({
+                            competition: batch.competition,
+                            competition_foreign_id: batch.competition_foreign_id,
+                            is_team: batch.is_team,
+                            starts: batch.data.starts,
+                            teams: batch.data.teams || null,
+                            details: batch.details
+                        });
+                    }
+                });
+                
+                // Remove duplicates
+                const uniquePeople = removeDuplicates(allPeople, 'foreign_id');
+                const uniqueHorses = removeDuplicates(allHorses, 'foreign_id');
+                const uniqueClubs = removeDuplicates(allClubs, 'foreign_id');
+                
+                debugLog('Total unique people to import:', uniquePeople.length);
+                debugLog('Total unique horses to import:', uniqueHorses.length);
+                debugLog('Total unique clubs to import:', uniqueClubs.length);
+                
+                // Step 1: Import clubs, people and horses
+                const transactionUuid1 = generateUuid();
+                const consolidatedBatch = {};
+                
+                if (uniqueClubs.length > 0) {
+                    consolidatedBatch.clubs = {
+                        unique_by: 'foreign_id',
+                        records: uniqueClubs
+                    };
+                }
+                
+                if (uniquePeople.length > 0) {
+                    consolidatedBatch.people = {
+                        unique_by: 'foreign_id',
+                        records: uniquePeople
+                    };
+                }
+                
+                if (uniqueHorses.length > 0) {
+                    consolidatedBatch.horses = {
+                        unique_by: 'foreign_id',
+                        records: uniqueHorses
+                    };
+                }
+                
+                // Import if we have data
+                if (Object.keys(consolidatedBatch).length > 0) {
+                    let importMessage = 'Importing ';
+                    const parts = [];
+                    if (uniqueClubs.length > 0) parts.push('clubs');
+                    if (uniquePeople.length > 0) parts.push('riders');
+                    if (uniqueHorses.length > 0) parts.push('horses');
+                    importMessage += parts.join(', ') + '...';
+                    
+                    $('#startlistProgress').prepend('<div class="progress-item pending">' + importMessage + '</div>');
+                    
+                    $.ajax({
+                        url: '/api/v1/imports/send_batch_to_equipe',
+                        type: 'POST',
+                        data: {
+                            batch_data: JSON.stringify(consolidatedBatch),
+                            api_key: apiKey,
+                            meeting_url: meetingUrl,
+                            transaction_uuid: transactionUuid1
+                        },
+                        dataType: 'json',
+                        success: function(response) {
+                            if (response.success) {
+                                debugLog('Clubs, people and horses imported successfully');
+                                let successMessage = '';
+                                const successParts = [];
+                                if (uniqueClubs.length > 0) successParts.push(uniqueClubs.length + ' clubs');
+                                if (uniquePeople.length > 0) successParts.push(uniquePeople.length + ' riders');
+                                if (uniqueHorses.length > 0) successParts.push(uniqueHorses.length + ' horses');
+                                successMessage = successParts.join(', ') + ' imported successfully';
+                                
+                                $('#startlistProgress .progress-item:first').removeClass('pending').addClass('success').html(successMessage);
+                                
+                                // Step 2: Import teams and starts
+                                setTimeout(importTeamsAndStartlists, 500);
+                            } else {
+                                $('#startlistProgress .progress-item:first').removeClass('pending').addClass('failed').html('Failed to import basic data');
+                                debugLog('Failed to import:', response);
+                            }
+                        },
+                        error: function(xhr, status, error) {
+                            $('#startlistProgress .progress-item:first').removeClass('pending').addClass('failed').html('Failed to import basic data');
+                            debugLog('Request failed:', error);
+                        }
+                    });
+                } else {
+                    // No basic data to import, go directly to teams and starts
+                    importTeamsAndStartlists();
+                }
+                
+                // Function to import teams and startlists
+                function importTeamsAndStartlists() {
+                    let successCount = 0;
+                    let failCount = 0;
+                    let processed = 0;
+                    const total = competitionStarts.length;
+                    
+                    competitionStarts.forEach(function(compStarts) {
+                        const transactionUuid = generateUuid();
+                        const batchData = {};
+                        
+                        // For team competitions, include teams
+                        if (compStarts.is_team && compStarts.teams) {
+                            batchData.teams = compStarts.teams;
+                        }
+                        
+                        // Add starts
+                        batchData.starts = compStarts.starts;
+                        
+                        debugLog('Sending batch for:', compStarts.competition, 'with teams:', compStarts.teams ? 'yes' : 'no');
+                        
+                        $.ajax({
+                            url: '/api/v1/imports/send_batch_to_equipe',
+                            type: 'POST',
+                            data: {
+                                batch_data: JSON.stringify(batchData),
+                                api_key: apiKey,
+                                meeting_url: meetingUrl,
+                                transaction_uuid: transactionUuid
+                            },
+                            dataType: 'json',
+                            success: function(response) {
+                                if (response.success) {
+                                    successCount++;
+                                    $('#startlist-' + compStarts.competition_foreign_id).removeClass('pending').addClass('success');
+                                    if (compStarts.teams && compStarts.teams.records) {
+                                        $('#startlist-' + compStarts.competition_foreign_id).append(' <small>(' + compStarts.teams.records.length + ' teams)</small>');
+                                    }
+                                } else {
+                                    failCount++;
+                                    $('#startlist-' + compStarts.competition_foreign_id).removeClass('pending').addClass('failed');
+                                    debugLog('Import failed for:', compStarts.competition);
+                                    debugLog('Response:', response);
+                                }
+                                
+                                processed++;
+                                checkComplete();
+                            },
+                            error: function(xhr, status, error) {
+                                failCount++;
+                                $('#startlist-' + compStarts.competition_foreign_id).removeClass('pending').addClass('failed');
+                                debugLog('Request failed for:', compStarts.competition);
+                                debugLog('Error:', error);
+                                
+                                processed++;
+                                checkComplete();
+                            }
+                        });
+                    });
+                    
+                    function checkComplete() {
+                        if (processed === total) {
+                            // Call callback if provided
+                            if (typeof onCompleteCallback === 'function') {
+                                onCompleteCallback();
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // Import results batches to Equipe
+            function importResultsBatchesToEquipe(batchDataArray) {
+                let successCount = 0;
+                let failCount = 0;
+                let processed = 0;
+                const total = batchDataArray.length;
+                
+                batchDataArray.forEach(function(batch) {
+                    const transactionUuid = generateUuid();
+                    
+                    debugLog('Sending results batch for:', batch.competition);
+                    
+                    $.ajax({
+                        url: '/api/v1/imports/send_batch_to_equipe',
+                        type: 'POST',
+                        data: {
+                            batch_data: JSON.stringify(batch.data),
+                            api_key: apiKey,
+                            meeting_url: meetingUrl,
+                            transaction_uuid: transactionUuid
+                        },
+                        dataType: 'json',
+                        success: function(response) {
+                            if (response.success) {
+                                successCount++;
+                                $('#result-' + batch.competition_foreign_id).removeClass('pending').addClass('success');
+                            } else {
+                                failCount++;
+                                $('#result-' + batch.competition_foreign_id).removeClass('pending').addClass('failed');
+                                debugLog('Results import failed for:', batch.competition);
+                                debugLog('Response:', response);
+                            }
+                            
+                            processed++;
+                            checkComplete();
+                        },
+                        error: function(xhr, status, error) {
+                            failCount++;
+                            $('#result-' + batch.competition_foreign_id).removeClass('pending').addClass('failed');
+                            debugLog('Request failed for results:', batch.competition);
+                            debugLog('Error:', error);
+                            
+                            processed++;
+                            checkComplete();
+                        }
+                    });
+                });
+                
+                function checkComplete() {
+                    if (processed === total) {
+                        showFinalSummary();
+                    }
+                }
+            }
+            
+            // Show final summary
+            function showFinalSummary() {
+                let html = '<div class="progress-section">';
+                html += '<h5>Import Complete!</h5>';
+                html += '<div class="alert alert-success">';
+                html += 'The import process has been completed. Check the progress above for details.';
+                html += '</div>';
+                html += '</div>';
+                
+                $('#importProgress').append(html);
+            }
+            
+            // Helper functions
+            function generateUuid() {
+                return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+                    var r = Math.random() * 16 | 0,
+                        v = c == 'x' ? r : (r & 0x3 | 0x8);
+                    return v.toString(16);
+                });
+            }
+            
+            function removeDuplicates(array, key) {
+                const seen = new Set();
+                return array.filter(item => {
+                    const value = item[key];
+                    if (seen.has(value)) {
+                        return false;
+                    }
+                    seen.add(value);
+                    return true;
+                });
+            }
+            
+            // New import button
+            $('#newImportButton').on('click', function() {
+                $('#resultsStep').hide();
+                $('#searchStep').show();
+                $('#showId').val('');
+                currentEventData = null;
+                currentSelections = [];
+                importOptions = {
+                    classes: false,
+                    startlists: false,
+                    results: false
+                };
+            });
+        });
+    </script>
+</body>
+</html>

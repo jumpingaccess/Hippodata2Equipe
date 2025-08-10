@@ -1,0 +1,199 @@
+/* Custom styles for Hippodata import extension */
+
+.import-container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px;
+}
+
+.form-group {
+    margin-bottom: 15px;
+}
+
+.form-control {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 14px;
+}
+
+.btn {
+    padding: 8px 16px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: background-color 0.3s;
+}
+
+.btn-primary {
+    background-color: #007bff;
+    color: white;
+}
+
+.btn-primary:hover {
+    background-color: #0056b3;
+}
+
+.btn-secondary {
+    background-color: #6c757d;
+    color: white;
+}
+
+.btn-secondary:hover {
+    background-color: #545b62;
+}
+
+.btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.alert {
+    padding: 12px 20px;
+    border-radius: 4px;
+    margin-bottom: 20px;
+}
+
+.alert-danger {
+    background-color: #f8d7da;
+    color: #721c24;
+    border: 1px solid #f5c6cb;
+}
+
+.alert-success {
+    background-color: #d4edda;
+    color: #155724;
+    border: 1px solid #c3e6cb;
+}
+
+.classes-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 20px;
+}
+
+.classes-table th,
+.classes-table td {
+    padding: 10px;
+    text-align: left;
+    border-bottom: 1px solid #ddd;
+}
+
+.classes-table th {
+    background-color: #f8f9fa;
+    font-weight: bold;
+}
+
+.select-all-row {
+    background-color: #e9ecef;
+}
+
+.select-all-row td {
+    font-weight: bold;
+}
+
+.action-buttons {
+    margin-top: 30px;
+    text-align: right;
+}
+
+.action-buttons .btn {
+    margin-left: 10px;
+}
+
+.progress-section {
+    margin-bottom: 30px;
+}
+
+.progress-section h5 {
+    margin-bottom: 15px;
+    color: #333;
+}
+
+.progress-item {
+    padding: 10px 15px;
+    margin-bottom: 10px;
+    border-radius: 4px;
+    background-color: #f8f9fa;
+    border: 1px solid #dee2e6;
+}
+
+.progress-item.pending {
+    background-color: #fff3cd;
+    border-color: #ffeaa7;
+    color: #856404;
+}
+
+.progress-item.success {
+    background-color: #d4edda;
+    border-color: #c3e6cb;
+    color: #155724;
+}
+
+.progress-item.failed {
+    background-color: #f8d7da;
+    border-color: #f5c6cb;
+    color: #721c24;
+}
+
+#eventInfo {
+    background-color: #f8f9fa;
+    padding: 15px;
+    border-radius: 4px;
+    margin-bottom: 20px;
+}
+
+#eventInfo h4 {
+    margin-top: 0;
+    color: #333;
+}
+
+#eventInfo p {
+    margin: 5px 0;
+}
+
+.fa-spinner {
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+.text-center {
+    text-align: center;
+}
+
+.my-3 {
+    margin-top: 1rem;
+    margin-bottom: 1rem;
+}
+
+.text-primary {
+    color: #007bff;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .classes-table {
+        font-size: 12px;
+    }
+    
+    .classes-table th,
+    .classes-table td {
+        padding: 5px;
+    }
+    
+    .action-buttons {
+        text-align: center;
+    }
+    
+    .action-buttons .btn {
+        display: block;
+        width: 100%;
+        margin: 10px 0;
+    }
+}
