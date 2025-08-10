@@ -196,7 +196,7 @@ For technical support or questions:
 
 ## 📄 License
 
-This project is proprietary software developed for Equipe integration. Contact for licensing information.
+This project is developed for Equipe integration with the agreement of Hippodata GMBH. Contact for more information.
 
 ## 🔄 Updates
 
