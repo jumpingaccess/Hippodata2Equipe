@@ -200,7 +200,7 @@ This project is developed for Equipe integration with the agreement of Hippodata
 
 ## 🔄 Updates
 
-### Latest Version (January 2025)
+### Latest Version (10/08/2025)
 - ✅ Full team competition support
 - ✅ Enhanced result status handling
 - ✅ Import status indicators
