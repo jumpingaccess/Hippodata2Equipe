@@ -1,3 +1,7 @@
+![Image Alt Text](images/index_extension.png)
+![Image Alt Text](images/competitions_screen.png)
+![Image Alt Text](images/checkbox_to_import.png)
+
 # Equipe Extension - Hippodata Import
 
 ## 🏇 Project Overview
