@@ -1,6 +1,6 @@
-# Equipe Extension - Hippodata Import
+# Equipe Extension - Hippodata Import (PHP Version)
 
-This extension allows importing competitions, start lists and results from the Hippodata API to Equipe.
+This PHP extension allows importing competitions, start lists and results from the Hippodata API to Equipe.
 
 ## Features
 
@@ -14,18 +14,17 @@ This extension allows importing competitions, start lists and results from the H
 - **Smart duplicate management**: Avoids duplication of existing riders and horses
 - **Multi-round support**: Handles up to 5 rounds per competition
 - **Special status handling**: Eliminated, retired, withdrawn, abstained riders
+- **Skip rounds management**: Automatic handling of excluded riders in team competitions
 - **Debug mode**: Detailed operation display for troubleshooting
 
-## ✅ Completed Features (as of 09/08/2025)
+## ✅ Completed Features (as of 10/01/2025)
 
 - ✅ **FEI Article management**: Full list of FEI competition formats
 - ✅ **Team competitions**: Automatic team creation based on nations (minimum 3 riders)
 - ✅ **Import status indicators**: Green checkmarks for already imported items
 - ✅ **Enhanced results handling**: Support for abstained riders in team competitions
 - ✅ **Country name mapping**: IOC codes mapped to full country names
-
-## TODO
-- **FEI Article Management**
+- ✅ **Skip rounds**: Automatic detection and handling of excluded riders (4th rider) in team competitions
 
 ## Installation
 
@@ -108,42 +107,47 @@ Create an action:
 
 ### Import Options
 
-- For each class, you can select:
+For each class, you can select:
 
-  - ☐ Class Import: Import the competition definition
-  - ☐ Startlist Import: Import riders, horses and entries
-  - ☐ Result Import: Import competition results
-  - ☐ Team Class: Mark as team competition (Nations Cup)
-  - FEI Article: Select the competition format
+- ☐ **Class Import**: Import the competition definition
+- ☐ **Startlist Import**: Import riders, horses and entries
+- ☐ **Result Import**: Import competition results
+- ☐ **Team Class**: Mark as team competition (Nations Cup)
+- **FEI Article**: Select the competition format
 
-- Team Competitions
-  - When "Team Class" is checked:
-    - Automatically creates teams based on nations
-    - Only nations with 3+ riders get a team
-    - Creates clubs with country flags
-    - Links riders to their national teams
-    - Handles team-specific results (abstained riders count for team)
+### Team Competitions
 
-- Import Status Indicators
-  - ✓ Green checkmark: Already imported
-  - Checkbox: Available for import
-  - Disabled checkbox: Requires prerequisite (e.g., class must exist before startlist)
+When "Team Class" is checked:
+- Automatically creates teams based on nations
+- Only nations with 3+ riders get a team
+- Creates clubs with country flags
+- Links riders to their national teams
+- Handles team-specific results (abstained riders count for team)
+- **NEW**: Manages skip_rounds for excluded riders (4th rider in Nations Cup format)
 
 ### Special Results Handling
-  - Individual Competitions
-    - Eliminated (EL): or = 'D', grundf = 999
-    - Retired (RET): or = 'U', grundf = 999
-    - Disqualified (DSQ): or = 'S', grundf = 999
-    - Withdrawn: a = 'Ö' or special handling per round
-    - No Show (NS): a = 'U', grundf = 999
 
-  - Team Competitions
-    - Riders who complete round 1 but not round 2 are marked as "Abstained"
-    - Abstained riders: omh1f = 999, omh1t = 999, round2_in_team = true
-    - Result preview shows: "8-ABST" (faults from round 1 + abstained)
-    - Eliminated/retired riders keep their normal status (not converted to abstained)
+#### Individual Competitions
+- **Eliminated (EL)**: or = 'D', grundf = 999
+- **Retired (RET)**: or = 'U', grundf = 999
+- **Disqualified (DSQ)**: or = 'S', grundf = 999
+- **Withdrawn**: a = 'Ö' or special handling per round
+- **No Show (NS)**: a = 'U', grundf = 999
 
+#### Team Competitions
+- Riders who complete round 1 but not round 2 are marked as "Abstained"
+- Abstained riders: omh1f = 999, omh1t = 999, round2_in_team = true
+- Result preview shows: "8-ABST" (faults from round 1 + abstained)
+- Eliminated/retired riders keep their normal status (not converted to abstained)
+- **NEW - Skip Rounds**: For teams with 4+ riders:
+  - When only 3 riders participate in round 2: 4th rider gets `skip_rounds: [2]`
+  - When only 1 rider participates in jump-off: others get `skip_rounds: [3]`
+  - Ensures correct team calculations in Equipe
 
+### Import Status Indicators
+- ✓ Green checkmark: Already imported
+- Checkbox: Available for import
+- Disabled checkbox: Requires prerequisite (e.g., class must exist before startlist)
 
 ### Possible Combinations
 
@@ -198,19 +202,21 @@ Create an action:
 | - | round1_in_team | Counts for team in R1 | 
 | - | round2_in_team | Counts for team in R2 | 
 | - | result_preview | Display format (e.g., "8-ABST")| 
+| - | skip_rounds | Array of rounds to skip (e.g., [2, 3]) |
 
 ### Import Process Flow
 
-- Search Event: Fetch event data from Hippodata
-- Check Existing: Query Equipe for already imported items
-- Display Selection: Show classes with import status
-- Process Selection:
-  - Import classes (if selected)
-  - Import clubs (for team competitions)
-  - Import people and horses
-  - Import teams (for team competitions)
-  - Import starts/entries
-  - Import results (if selected)
+1. **Search Event**: Fetch event data from Hippodata
+2. **Check Existing**: Query Equipe for already imported items
+3. **Display Selection**: Show classes with import status
+4. **Process Selection**:
+   - Import classes (if selected)
+   - Import clubs (for team competitions)
+   - Import people and horses
+   - Import teams (for team competitions)
+   - Import starts/entries
+   - Import results (if selected)
+   - Handle skip_rounds for team competitions
 
 ## Debug Mode
 
@@ -219,23 +225,24 @@ Enable debug mode in `.env.php`:
 'DEBUG' => '1'
 ```
 
-- This displays:
-  - API requests made
-  - Data received and sent
-  - Transaction UUIDs for rollback
-  - Team creation details
-  - Import progress for each batch
+This displays:
+- API requests made
+- Data received and sent
+- Transaction UUIDs for rollback
+- Team creation details
+- Import progress for each batch
+- Skip rounds calculations for team competitions
 
-- Batch Import Structure
-  - The extension uses Equipe's batch API with proper ordering:
-    - Classes/Competitions
-    - Clubs (for teams)
-    - People & Horses
-    - Teams
-    - Starts/Entries
-    - Results
+### Batch Import Structure
+The extension uses Equipe's batch API with proper ordering:
+1. Classes/Competitions
+2. Clubs (for teams)
+3. People & Horses
+4. Teams
+5. Starts/Entries
+6. Results (with skip_rounds where applicable)
 
-- Each batch uses a unique transaction UUID for potential rollback.
+Each batch uses a unique transaction UUID for potential rollback.
 
 ## Security
 
@@ -248,53 +255,52 @@ Enable debug mode in `.env.php`:
 ## Troubleshooting
 
 ### Extension doesn't load
-
 Check:
 - HTTPS enabled on your server
 - CORS configuration in index.php
 - Correct JWT token in .env.php
 
 ### "FEI ID is required"
-
 The FEI event identifier is mandatory. Format: integer number.
 
 ### Import status not showing
-
 - Check API key permissions for GET requests
 - Verify meeting URL is correct
 - Enable debug mode to see API responses
 
 ### Teams not created
-
 - Ensure "Team Class" checkbox is selected
 - Verify nation has 3+ riders
 - Check clubs endpoint is accessible
 
-### Hippodata authentication error
+### Skip rounds not working
+- Verify team has 4+ riders
+- Check debug logs for skip_rounds calculations
+- Ensure results are imported after startlists
 
+### Hippodata authentication error
 Check:
 - Bearer token in `.env.php`
 - Token validity and permissions
 - Format: `Bearer YOUR_TOKEN`
 
 ### Partial import
-
 If some competitions don't import:
 - Check logs in debug mode
 - Some classes may not have startlist/results
 - Check competition status (official, cancelled, etc.)
 
 ### Duplicate riders/horses
-
 The extension automatically avoids duplicates by checking:
 - The `foreign_id` (FEI ID)
 - The `fei_id` field
+
 If duplicates appear, verify that FEI IDs are correct.
 
 ### Results showing incorrect status
-
 - Abstained: Only for team competitions when rider doesn't start later rounds
 - Eliminated/Retired: Keep their original status, not converted to abstained
+- Skip rounds: Check if team has 4+ riders and verify round participation
 - Check RESULTTOTAL.TEXT field in Hippodata response
 
 ## API Endpoints Used
@@ -305,17 +311,31 @@ If duplicates appear, verify that FEI IDs are correct.
 - `/scoring/event/{eventId}/resultlist/{classNr}`: Results
 
 ### Equipe
+- `JWT decoded->payload->meeting_url/batch`: Bulk import
+- `JWT decoded->payload->meeting_url/people.json`: Existing people
+- `JWT decoded->payload->meeting_url/horses.json`: Existing horses
+- `JWT decoded->payload->meeting_url/clubs.json`: Existing clubs
+- `JWT decoded->payload->meeting_url/competitions.json`: Existing competitions
+- `JWT decoded->payload->meeting_url/competitions/{id}/starts.json`: Check startlists
+- `JWT decoded->payload->meeting_url/competitions/{id}/H/results.json`: Check results
 
-- `JWT decoded->palyload->meeting_url/batch`: Bulk import
-- `JWT decoded->palyload->meeting_url/people.json`: Existing people
-- `JWT decoded->palyload->meeting_url/horses.json`: Existing horses
-- `JWT decoded->palyload->meeting_url/clubs.json`: Existing clubs
-- `JWT decoded->palyload->meeting_url/competitions.json`: Existing competitions
-- `JWT decoded->palyload->meeting_url/competitions/{id}/starts.json`: Check startlists
-- `JWT decoded->palyload->meeting_url/competitions/{id}/H/results.json`: Check results
 ## Support
 
 For any questions or issues:
 - Jumpingaccess Support: info@jumpingaccess.com
 - Server logs for PHP errors
 - Debug mode to trace operations
+
+## Changelog
+
+### Version 1.1.0 (10/01/2025)
+- Added skip_rounds support for team competitions
+- Improved team result handling for 4+ rider teams
+- Enhanced debug logging for team competitions
+- Fixed round participation detection
+
+### Version 1.0.0 (09/01/2025)
+- Initial release with full import functionality
+- Team competition support
+- FEI article management
+- Import status indicators

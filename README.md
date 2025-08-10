@@ -159,6 +159,7 @@ The extension supports flexible import combinations:
 - Team-specific result handling
 - Support for Nations Cup formats
 - Abstained rider management
+- **Skip rounds**: Automatic detection of excluded riders (4th rider in team competitions)
 
 ## 🔍 Debug Mode
 
@@ -194,10 +195,6 @@ For technical support or questions:
 - **Documentation**: See version-specific README files
 - **Issues**: Use GitHub issues for bug reports
 
-## 📄 License
-
-This project is developed for Equipe integration with the agreement of Hippodata GMBH. Contact for more information.
-
 ## 🔄 Updates
 
 ### Latest Version (10/08/2025)
@@ -206,9 +203,4 @@ This project is developed for Equipe integration with the agreement of Hippodata
 - ✅ Import status indicators
 - ✅ FEI article management
 - ✅ Country name mapping
-
-### Roadmap
-- [ ] FEI Articles Management
-
-
----
+- ✅ Skip rounds management for team competitions (4th rider exclusion)
