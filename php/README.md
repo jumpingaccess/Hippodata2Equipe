@@ -328,6 +328,9 @@ For any questions or issues:
 
 ## Changelog
 
+### Version 1.1.1 (10/01/2025)
+- Added event logo from Hippodata on extension
+
 ### Version 1.1.0 (10/01/2025)
 - Added skip_rounds support for team competitions
 - Improved team result handling for 4+ rider teams

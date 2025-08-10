@@ -11,4 +11,7 @@ return [
 
     // DEBUG Inormation On/Off
     'DEBUG' => 1,
+
+    // Version
+    "VERSION" => "1.1.1",
 ];
