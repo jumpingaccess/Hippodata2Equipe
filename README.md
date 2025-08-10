@@ -1,325 +1,214 @@
-![Image Alt Text](images/index_extension.png)
-![Image Alt Text](images/competitions_screen.png)
-![Image Alt Text](images/checkbox_to_import.png)
-
 # Equipe Extension - Hippodata Import
 
-This extension allows importing competitions, start lists and results from the Hippodata API to Equipe.
+## 🏇 Project Overview
 
-## Features
+This project is an extension for the **Equipe** competition management system that enables seamless import of equestrian competition data from the **Hippodata API** (FEI event data). It bridges the gap between FEI's official competition data and local competition management systems.
 
-- **Import competitions/classes**: Import events with their information (prize money, dates, FEI articles)
-- **Import startlists**: Import riders, horses and entries
-- **Import results**: Import complete results with times, faults and rankings
-- **Team competitions support**: Full support for Nations Cup and team events
-- **Import status checking**: Visual indicators for already imported data
-- **FEI Article management**: Select competition format according to FEI rules
-- **Flexible import**: Import separately or in combination
-- **Smart duplicate management**: Avoids duplication of existing riders and horses
-- **Multi-round support**: Handles up to 5 rounds per competition
-- **Special status handling**: Eliminated, retired, withdrawn, abstained riders
-- **Debug mode**: Detailed operation display for troubleshooting
+### Key Features
 
-## ✅ Completed Features (as of 09/08/2025)
+- 🏆 **Competition Import**: Import complete event structures with prize money, dates, and FEI articles
+- 👥 **Startlist Management**: Import riders, horses, and entries with automatic duplicate detection
+- 📊 **Results Processing**: Import complete results including times, faults, and special statuses
+- 🌍 **Team Competition Support**: Full support for Nations Cup and team events with automatic team creation
+- ✅ **Smart Import Status**: Visual indicators for already imported data
+- 🔄 **Flexible Import Options**: Import data separately or in combination based on needs
 
-- ✅ **FEI Article management**: Full list of FEI competition formats
-- ✅ **Team competitions**: Automatic team creation based on nations (minimum 3 riders)
-- ✅ **Import status indicators**: Green checkmarks for already imported items
-- ✅ **Enhanced results handling**: Support for abstained riders in team competitions
-- ✅ **Country name mapping**: IOC codes mapped to full country names
+## 🛠️ Available Implementations
 
-## TODO
-- **FEI Article Management**
+The extension is available in two implementations:
 
-## Installation
+### 1. PHP Version (`/php`)
+- **Technology**: PHP 7.4+ with Composer
+- **Architecture**: Procedural PHP with jQuery frontend
+- **Deployment**: Simple web hosting with HTTPS
+- **Best for**: Quick deployment, shared hosting environments
 
-### 1. Prerequisites
+### 2. Rails Version (`/rails`)
+- **Technology**: Ruby on Rails 7.0+ with PostgreSQL
+- **Architecture**: MVC with service objects and RESTful API
+- **Deployment**: Full Rails application deployment
+- **Best for**: Enterprise environments, advanced customization needs
 
-- PHP >= 7.4
-- Composer
-- Web server with HTTPS (required for iframe cookies)
-- Equipe account with API access
-- Hippodata API access with Bearer token
+Both versions provide identical functionality and user experience.
 
-### 2. Install dependencies
+## 📋 How It Works
+
+### Integration Flow
+
+```
+Equipe System
+     ↓
+JWT Token (includes meeting info)
+     ↓
+Extension (PHP/Rails)
+     ↓
+Hippodata API
+     ↓
+Data Transformation
+     ↓
+Equipe Batch API
+```
+
+### User Workflow
+
+1. **Access**: User opens extension from within Equipe meeting interface
+2. **Search**: Enter FEI Event ID to fetch competition data
+3. **Select**: Choose which competitions and data types to import
+4. **Configure**: Set team flags and FEI articles as needed
+5. **Import**: Process data with real-time progress tracking
+6. **Complete**: Review import results and status
+
+## 🚀 Quick Start
+
+### PHP Version
 
 ```bash
+# Clone repository
+git clone <repository-url>
+cd PHP
+
+# Install dependencies
 composer install
-```
 
-### 3. Configuration
-
-1. Copy the `.env.php.example` file to `.env.php`
-```bash
+# Configure environment
 cp .env.php.example .env.php
+# Edit .env.php with your API keys
+
+# Deploy to web server with HTTPS
 ```
 
-2. Edit `.env.php` and add your keys:
-```php
-<?php
-return [
-    'EQUIPE_SECRET' => 'your-equipe-jwt-key',
-    'HIPPODATA_BEARER' => 'your-hippodata-bearer-token',
-    'DEBUG' => '0' // Set to '1' to enable debug mode
-];
+### Rails Version
+
+```bash
+# Clone repository
+git clone <repository-url>
+cd rails
+
+# Install dependencies
+bundle install
+
+# Configure environment
+cp .env.example .env
+# Edit .env with your API keys
+
+# Setup database
+rails db:create
+rails db:migrate
+
+# Start server
+rails server
 ```
 
-### 4. File structure
+## 🔧 Configuration
 
-```
-/
-├── index.php                 # Main entry point
-├── composer.json            # PHP dependencies
-├── .env.php.example         # Configuration template
-├── .env.php                 # Configuration (create, ignored by git)
-├── css/
-│   └── custom.css          # Custom styles (optional)
-└── vendor/                  # Dependencies (generated by composer)
-```
+### Required API Keys
 
-## Equipe Configuration
+1. **Equipe JWT Secret**: Provided when creating extension in Equipe
+2. **Hippodata Bearer Token**: API access token from Hippodata
 
-### 1. Create the extension in Equipe
+### Equipe Extension Setup
 
-1. Go to organization settings
-2. Create a new extension
-3. Configure:
-   - **Base URL**: `https://your-domain.com/path-to-extension/`
-   - **JWT Secret**: Generate and copy to `.env.php`
-   - **Type**: Modal/Browser
+1. Log into Equipe as administrator
+2. Navigate to Organization Settings → Extensions
+3. Create new extension with:
+   - **Type**: Modal or Browser
+   - **Context**: Meeting
+   - **URL**: Your deployment URL
+   - **JWT Secret**: Copy to your configuration
 
-### 2. Add actions
+## 📊 Data Mapping
 
-Create an action:
-- **Name**: `import_from_hippodata`
-- **Label**: "Import from Hippodata"
-- **Context**: Meeting
-- **Type**: Modal or Browser
+### Competition Classes
+- FEI Event → Equipe Competition
+- Support for all FEI articles and competition formats
+- Prize money and currency conversion
+- Team competition flags
 
-## Usage
-
-### Import Interface
-
-- In Equipe, open a meeting
-- Click on "Import from Hippodata" action
-- In the window that opens:
-  - Enter the FEI Show ID (Event identifier)
-  - Click "Search Event"
-  - The system will display:
-    - Event name and venue
-    - List of all classes/competitions
-    - Import status for each item (✓ = already imported)
-
-### Import Options
-
-- For each class, you can select:
-
-  - ☐ Class Import: Import the competition definition
-  - ☐ Startlist Import: Import riders, horses and entries
-  - ☐ Result Import: Import competition results
-  - ☐ Team Class: Mark as team competition (Nations Cup)
-  - FEI Article: Select the competition format
-
-- Team Competitions
-  - When "Team Class" is checked:
-    - Automatically creates teams based on nations
-    - Only nations with 3+ riders get a team
-    - Creates clubs with country flags
-    - Links riders to their national teams
-    - Handles team-specific results (abstained riders count for team)
-
-- Import Status Indicators
-  - ✓ Green checkmark: Already imported
-  - Checkbox: Available for import
-  - Disabled checkbox: Requires prerequisite (e.g., class must exist before startlist)
-
-### Special Results Handling
-  - Individual Competitions
-    - Eliminated (EL): or = 'D', grundf = 999
-    - Retired (RET): or = 'U', grundf = 999
-    - Disqualified (DSQ): or = 'S', grundf = 999
-    - Withdrawn: a = 'Ö' or special handling per round
-    - No Show (NS): a = 'U', grundf = 999
-
-  - Team Competitions
-    - Riders who complete round 1 but not round 2 are marked as "Abstained"
-    - Abstained riders: omh1f = 999, omh1t = 999, round2_in_team = true
-    - Result preview shows: "8-ABST" (faults from round 1 + abstained)
-    - Eliminated/retired riders keep their normal status (not converted to abstained)
-
-
-
-### Possible Combinations
-
-- ✅ **Classes only**: To prepare the meeting
-- ✅ **Startlists only**: If classes already exist
-- ✅ **Results only**: To update after competition
-- ✅ **Classes + Startlists**: Complete import before competition
-- ✅ **Classes + Results**: Import after with results
-- ✅ **Startlists + Results**: Complete update
-- ✅ **Everything**: Complete import at once
-
-## Data Mapping
-
-### Competitions
-| Hippodata | Equipe | Description |
-|-----------|---------|-------------|
-| ID | foreign_id | Unique identifier |
-| NR | - | Class number (used for APIs) |
-| NAME/SPONSOR | klass | Competition name |
-| DATE | datum | Competition date |
-| PRIZE.MONEY | prsum1 | Total prize money |
-| PRIZE.CURRENCY | premie_curr | Currency |
-
-### Riders
-| Hippodata | Equipe | Description |
-|-----------|---------|-------------|
-| RFEI_ID | foreign_id/fei_id | FEI identifier |
-| RNAME | first_name, last_name | Name (parsed) |
-| NATION | country | Country |
-
-### Horses
-| Hippodata | Equipe | Description |
-|-----------|---------|-------------|
-| HFEI_ID | foreign_id/fei_id | FEI identifier |
-| HNAME | name | Horse name |
-| HNR | num | Number |
-| GENDER | sex | Gender (M→val, F→sto, G→val) |
-| BORNYEAR | born_year | Birth year |
-| OWNER | owner | Owner |
+### Participants
+- **Riders**: FEI ID mapping with country codes
+- **Horses**: Gender mapping, birth year, ownership
+- **Teams**: Automatic creation for nations with 3+ riders
 
 ### Results
-| Hippodata | Equipe | Description| 
-|-----------|---------|-------------|
-| RANK | re| Final ranking | 
-| FAULTS R1 | grundf | Round 1 faults |
-| TIME R1 | grundt | Round 1 time | 
-| FAULTS R2 | omh1f | Round 2/Jump-off faults | 
-| TIME R2 | omh1t | Round 2/Jump-off time | 
-| TIMEFAULTS | tfg, tf1, etc. | Time penalties per round | 
-| PRIZE.MONEY | premie | Prize money won | 
-| STATUS | or, a | Special status | 
-| - | round1_in_team | Counts for team in R1 | 
-| - | round2_in_team | Counts for team in R2 | 
-| - | result_preview | Display format (e.g., "8-ABST")| 
+- Multi-round support (up to 5 rounds)
+- Special statuses: Eliminated, Retired, Withdrawn, etc.
+- Team-specific handling (abstained riders)
+- Time penalties and prize money allocation
 
-### Import Process Flow
+## 🎯 Import Options
 
-- Search Event: Fetch event data from Hippodata
-- Check Existing: Query Equipe for already imported items
-- Display Selection: Show classes with import status
-- Process Selection:
-  - Import classes (if selected)
-  - Import clubs (for team competitions)
-  - Import people and horses
-  - Import teams (for team competitions)
-  - Import starts/entries
-  - Import results (if selected)
+The extension supports flexible import combinations:
 
-## Debug Mode
+| Option | Use Case |
+|--------|----------|
+| Classes Only | Prepare meeting structure |
+| Startlists Only | Update participants for existing classes |
+| Results Only | Import results after competition |
+| Classes + Startlists | Complete pre-competition setup |
+| Classes + Results | Post-competition import |
+| Full Import | Complete event import |
 
-Enable debug mode in `.env.php`:
-```php
-'DEBUG' => '1'
-```
+## 🏆 Team Competition Features
 
-- This displays:
-  - API requests made
-  - Data received and sent
-  - Transaction UUIDs for rollback
-  - Team creation details
-  - Import progress for each batch
+- Automatic team detection based on rider count
+- Country flag assignment for teams
+- Team-specific result handling
+- Support for Nations Cup formats
+- Abstained rider management
 
-- Batch Import Structure
-  - The extension uses Equipe's batch API with proper ordering:
-    - Classes/Competitions
-    - Clubs (for teams)
-    - People & Horses
-    - Teams
-    - Starts/Entries
-    - Results
+## 🔍 Debug Mode
 
-- Each batch uses a unique transaction UUID for potential rollback.
+Enable debug mode for detailed operation logging:
 
-## Security
+**PHP**: Set `DEBUG => 1` in `.env.php`  
+**Rails**: Set `DEBUG=1` in `.env`
 
-- JWT verification on each request
-- Tokens stored outside source code
-- HTTPS required for iframe cookies
-- Input data validation
-- CORS headers configured for app.equipe.com
+## 📝 Version Comparison
 
-## Troubleshooting
+| Feature | PHP Version | Rails Version |
+|---------|-------------|---------------|
+| Core Functionality | ✅ Full | ✅ Full |
+| Installation Complexity | ⭐ Simple | ⭐⭐⭐ Complex |
+| Server Requirements | PHP 7.4+ | Ruby 3.2+, PostgreSQL |
+| Scalability | ⭐⭐ Good | ⭐⭐⭐ Excellent |
+| Maintenance | Simple files | Rails ecosystem |
+| Customization | Direct PHP edits | Rails conventions |
+| Performance | ⭐⭐ Good | ⭐⭐⭐ Excellent |
 
-### Extension doesn't load
+## 🛡️ Security
 
-Check:
-- HTTPS enabled on your server
-- CORS configuration in index.php
-- Correct JWT token in .env.php
+- JWT token validation on all requests
+- API keys stored in environment variables
+- HTTPS required for production
+- CORS protection configured
+- Input validation and sanitization
 
-### "FEI ID is required"
+## 🤝 Support
 
-The FEI event identifier is mandatory. Format: integer number.
+For technical support or questions:
+- **Email**: info@jumpingaccess.com
+- **Documentation**: See version-specific README files
+- **Issues**: Use GitHub issues for bug reports
 
-### Import status not showing
+## 📄 License
 
-- Check API key permissions for GET requests
-- Verify meeting URL is correct
-- Enable debug mode to see API responses
+This project is proprietary software developed for Equipe integration. Contact for licensing information.
 
-### Teams not created
+## 🔄 Updates
 
-- Ensure "Team Class" checkbox is selected
-- Verify nation has 3+ riders
-- Check clubs endpoint is accessible
+### Latest Version (January 2025)
+- ✅ Full team competition support
+- ✅ Enhanced result status handling
+- ✅ Import status indicators
+- ✅ FEI article management
+- ✅ Country name mapping
 
-### Hippodata authentication error
+### Roadmap
+- [ ] Bulk event import
+- [ ] Schedule synchronization
+- [ ] Live result updates
+- [ ] Export functionality
 
-Check:
-- Bearer token in `.env.php`
-- Token validity and permissions
-- Format: `Bearer YOUR_TOKEN`
+---
 
-### Partial import
-
-If some competitions don't import:
-- Check logs in debug mode
-- Some classes may not have startlist/results
-- Check competition status (official, cancelled, etc.)
-
-### Duplicate riders/horses
-
-The extension automatically avoids duplicates by checking:
-- The `foreign_id` (FEI ID)
-- The `fei_id` field
-If duplicates appear, verify that FEI IDs are correct.
-
-### Results showing incorrect status
-
-- Abstained: Only for team competitions when rider doesn't start later rounds
-- Eliminated/Retired: Keep their original status, not converted to abstained
-- Check RESULTTOTAL.TEXT field in Hippodata response
-
-## API Endpoints Used
-
-### Hippodata
-- `/scoring/event/{eventId}`: Event information
-- `/scoring/event/{eventId}/startlist/{classNr}/all`: Start lists
-- `/scoring/event/{eventId}/resultlist/{classNr}`: Results
-
-### Equipe
-
-- `JWT decoded->palyload->meeting_url/batch`: Bulk import
-- `JWT decoded->palyload->meeting_url/people.json`: Existing people
-- `JWT decoded->palyload->meeting_url/horses.json`: Existing horses
-- `JWT decoded->palyload->meeting_url/clubs.json`: Existing clubs
-- `JWT decoded->palyload->meeting_url/competitions.json`: Existing competitions
-- `JWT decoded->palyload->meeting_url/competitions/{id}/starts.json`: Check startlists
-- `JWT decoded->palyload->meeting_url/competitions/{id}/H/results.json`: Check results
-## Support
-
-For any questions or issues:
-- Jumpingaccess Support: info@jumpingaccess.com
-- Server logs for PHP errors
-- Debug mode to trace operations
+**Note**: Choose the implementation that best fits your infrastructure and requirements. Both versions are actively maintained and provide identical functionality.
