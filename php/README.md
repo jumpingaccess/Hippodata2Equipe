@@ -17,7 +17,7 @@ This PHP extension allows importing competitions, start lists and results from t
 - **Skip rounds management**: Automatic handling of excluded riders in team competitions
 - **Debug mode**: Detailed operation display for troubleshooting
 
-## ✅ Completed Features (as of 10/01/2025)
+## ✅ Completed Features (as of 2025-08-10)
 
 - ✅ **FEI Article management**: Full list of FEI competition formats
 - ✅ **Team competitions**: Automatic team creation based on nations (minimum 3 riders)
@@ -328,18 +328,18 @@ For any questions or issues:
 
 ## Changelog
 
-### Version 1.1.1 (10/01/2025)
+### Version 1.1.1 (10/08/2025)
 - Added event logo from Hippodata on extension
 - Added logo on competitions with team, lln, nations cup, equipe in the NAME 
 - Added automatic team class checkbox checked if competition NAME has team, lln, nations cup, equipe
 
-### Version 1.1.0 (10/01/2025)
+### Version 1.1.0 (10/08/2025)
 - Added skip_rounds support for team competitions
 - Improved team result handling for 4+ rider teams
 - Enhanced debug logging for team competitions
 - Fixed round participation detection
 
-### Version 1.0.0 (09/01/2025)
+### Version 1.0.0 (09/08/2025)
 - Initial release with full import functionality
 - Team competition support
 - FEI article management
