@@ -161,6 +161,9 @@ app/
 4. Push to the branch (`git push origin feature/amazing-feature`)
 5. Open a Pull Request
 
-## License
+## Support
 
-This project is proprietary software. All rights reserved.
+For any questions or issues:
+- Jumpingaccess Support: info@jumpingaccess.com
+- Server logs for PHP errors
+- Debug mode to trace operations
