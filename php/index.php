@@ -53,7 +53,7 @@ $debugMode = isset($_ENV['DEBUG']) && $_ENV['DEBUG'] == '1';
 // Traiter les requêtes AJAX
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     header('Content-Type: application/json');
-    // check exists
+// check exists
     if ($_POST['action'] === 'get_imported_status') {
         $meetingUrl = $_POST['meeting_url'] ?? '';
         $apiKey = $_POST['api_key'] ?? '';
@@ -201,7 +201,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         
         exit;
     }
-    // Nouvelle action pour récupérer les infos de l'event
+// Nouvelle action pour récupérer les infos de l'event
     if ($_POST['action'] === 'fetch_event_info') {
         $showId = $_POST['show_id'] ?? '';
         
@@ -265,7 +265,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         exit;
     }
     
-    // Action modifiée pour importer sélectivement
+// Action modifiée pour importer sélectivement
     if ($_POST['action'] === 'import_selected') {
         $showId = $_POST['show_id'] ?? '';
         $apiKey = $_POST['api_key'] ?? '';
@@ -434,7 +434,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         exit;
     }
     
-    // Action pour envoyer un batch à Equipe (proxy pour éviter CORS)
+// Action pour envoyer un batch à Equipe (proxy pour éviter CORS)
     if ($_POST['action'] === 'send_batch_to_equipe') {
         $batchData = json_decode($_POST['batch_data'] ?? '{}', true);
         $apiKey = $_POST['api_key'] ?? '';
@@ -486,7 +486,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         exit;
     }
     
-    // Action pour importer les startlists
+// Action pour importer les startlists
+
     if ($_POST['action'] === 'import_startlists') {
         if ($debugMode) {
             error_log("Import startlists action triggered");
@@ -657,13 +658,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                 $classId = $comp['class_id'];
                 $competitionForeignId = $comp['foreign_id'];
                 $isTeamCompetition = isset($comp['is_team']) && $comp['is_team'];
-                // Après avoir récupéré $isTeamCompetition
+                
                 if ($debugMode) {
                     error_log("Competition " . $comp['name'] . " - is_team from frontend: " . ($isTeamCompetition ? 'yes' : 'no'));
                     error_log("Competition data: " . json_encode($comp));
-                }
-                if ($debugMode) {
-                    error_log("Processing competition: " . $comp['name'] . " (class_id: " . $classId . ", is_team: " . ($isTeamCompetition ? 'yes' : 'no') . ")");
                 }
                 
                 // Récupérer la startlist depuis Hippodata
@@ -806,35 +804,68 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                 }
                 
                 // Traiter chaque concurrent
-                foreach ($competitors as $competitor) {
+                foreach ($competitors as $competitorIndex => $competitor) {
                     $rider = $competitor['RIDER'] ?? [];
                     $horse = $competitor['HORSE'] ?? [];
                     $nation = $rider['NATION'] ?? '';
                     
-                    // Vérifier et préparer les données du cavalier
+                    // Gérer les cavaliers avec ou sans FEI ID
                     $riderFeiId = $rider['RFEI_ID'] ?? null;
+                    $riderName = $rider['RNAME'] ?? '';
+                    
+                    // Si pas de FEI ID, créer un ID temporaire basé sur le nom et l'event
+                    if (!$riderFeiId && $riderName) {
+                        // Créer un ID unique basé sur le nom du cavalier et l'ID de l'event
+                        $riderFeiId = 'TEMP_R_' . $eventId . '_' . md5($riderName);
+                        
+                        if ($debugMode) {
+                            error_log("Created temporary rider ID: $riderFeiId for $riderName");
+                        }
+                    }
+                    
+                    // Vérifier et préparer les données du cavalier
                     if ($riderFeiId && !isset($existingPeople[$riderFeiId]) && !isset($existingPeopleFeiIds[$riderFeiId])) {
-                        $nameParts = explode(',', $rider['RNAME'] ?? '');
+                        $nameParts = explode(',', $riderName);
                         $lastName = trim($nameParts[0] ?? '');
                         $firstName = trim($nameParts[1] ?? '');
                         
-                        $newPeople[] = [
+                        $newPerson = [
                             'foreign_id' => $riderFeiId,
                             'first_name' => $firstName,
                             'last_name' => $lastName,
-                            'country' => $nation,
-                            'fei_id' => $riderFeiId
+                            'country' => $nation ?: 'XXX' // Code pays par défaut si non spécifié
                         ];
                         
+                        // Ajouter le FEI ID seulement s'il est réel (pas temporaire)
+                        if (strpos($riderFeiId, 'TEMP_') !== 0) {
+                            $newPerson['fei_id'] = $riderFeiId;
+                        }
+                        
+                        $newPeople[] = $newPerson;
                         $existingPeople[$riderFeiId] = true;
                         $existingPeopleFeiIds[$riderFeiId] = true;
                     }
                     
-                    // Vérifier et préparer les données du cheval
+                    // Gérer les chevaux avec ou sans FEI ID
                     $horseFeiId = $horse['HFEI_ID'] ?? null;
+                    $horseName = $horse['HNAME'] ?? '';
+                    $horseNumber = $horse['HNR'] ?? '';
+                    
+                    // Si pas de FEI ID, créer un ID temporaire
+                    if (!$horseFeiId && $horseName) {
+                        // Créer un ID unique basé sur le nom du cheval, son numéro et l'ID de l'event
+                        $horseFeiId = 'TEMP_H_' . $eventId . '_' . md5($horseName . '_' . $horseNumber);
+                        
+                        if ($debugMode) {
+                            error_log("Created temporary horse ID: $horseFeiId for $horseName");
+                        }
+                    }
+                    
+                    // Vérifier et préparer les données du cheval
                     if ($horseFeiId && !isset($existingHorses[$horseFeiId]) && !isset($existingHorsesFeiIds[$horseFeiId])) {
                         $horseInfo = $horse['HORSEINFO'] ?? [];
                         
+                        // Gérer le genre du cheval
                         $gender = strtolower($horseInfo['GENDER'] ?? '');
                         $sexMap = [
                             'm' => 'val',
@@ -846,24 +877,58 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                         ];
                         $sex = $sexMap[$gender] ?? 'val';
                         
-                        $newHorses[] = [
+                        // Gérer l'année de naissance
+                        $bornYear = $horseInfo['BORNYEAR'] ?? '';
+                        // Si l'année est 2025 et l'âge est 0, c'est probablement une erreur
+                        if ($bornYear == 2025 && ($horseInfo['AGE'] ?? 0) == 0) {
+                            // Calculer l'année de naissance basée sur l'âge si disponible
+                            if (isset($horseInfo['AGE']) && $horseInfo['AGE'] > 0) {
+                                $bornYear = date('Y') - $horseInfo['AGE'];
+                            } else {
+                                $bornYear = ''; // Laisser vide si on ne peut pas déterminer
+                            }
+                        }
+                        
+                        $newHorse = [
                             'foreign_id' => $horseFeiId,
-                            'num' => $horse['HNR'] ?? '',
-                            'name' => $horse['HNAME'] ?? '',
+                            'num' => $horseNumber,
+                            'name' => $horseName,
                             'sex' => $sex,
-                            'born_year' => (string)($horseInfo['BORNYEAR'] ?? ''),
+                            'born_year' => (string)$bornYear,
                             'owner' => $horseInfo['OWNER'] ?? '',
-                            'category' => 'H',
-                            'fei_id' => $horseFeiId
+                            'category' => 'H'
                         ];
                         
+                        // Ajouter le FEI ID seulement s'il est réel (pas temporaire)
+                        if (strpos($horseFeiId, 'TEMP_') !== 0) {
+                            $newHorse['fei_id'] = $horseFeiId;
+                        }
+                        
+                        // Ajouter les infos généalogiques si disponibles
+                        if (!empty($horseInfo['FATHER'])) {
+                            $newHorse['father'] = $horseInfo['FATHER'];
+                        }
+                        if (!empty($horseInfo['MOTHERFATHER'])) {
+                            $newHorse['mother_father'] = $horseInfo['MOTHERFATHER'];
+                        }
+                        if (!empty($horseInfo['BREED'])) {
+                            $newHorse['breed'] = $horseInfo['BREED'];
+                        }
+                        if (!empty($horseInfo['COLOR'])) {
+                            $newHorse['color'] = $horseInfo['COLOR'];
+                        }
+                        
+                        $newHorses[] = $newHorse;
                         $existingHorses[$horseFeiId] = true;
                         $existingHorsesFeiIds[$horseFeiId] = true;
                     }
                     
                     // Préparer la start entry
                     if ($riderFeiId && $horseFeiId) {
-                        $sortOrder = $competitor['SORTROUND']['ROUND1'] ?? $competitor['SORTORDER'] ?? 0;
+                        $sortOrder = $competitor['SORTROUND']['ROUND1'] ?? $competitor['SORTORDER'] ?? ($competitorIndex + 1);
+                        
+                        // Pour les compétitions nationales, gérer le club différemment
+                        $clubInfo = $rider['CLUB'] ?? '';
                         
                         if ($isTeamCompetition && $nation && isset($teamsByNation[$nation])) {
                             // Start entry pour compétition par équipe (seulement si l'équipe existe)
@@ -879,14 +944,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                                 'club' => ['foreign_id' => 'club_' . $nation]
                             ];
                         } else {
-                            // Start entry normale (pas d'équipe ou nation avec moins de 3 cavaliers)
-                            $starts[] = [
+                            // Start entry normale (individuelle ou nationale)
+                            $startEntry = [
                                 'foreign_id' => $riderFeiId . '_' . $horseFeiId . '_' . $competitionForeignId,
                                 'st' => (string)$sortOrder,
                                 'ord' => (int)$sortOrder,
                                 'rider' => ['foreign_id' => $riderFeiId],
                                 'horse' => ['foreign_id' => $horseFeiId]
                             ];
+                            
+                            // Pour les compétitions nationales, ajouter le club comme texte si disponible
+                            if ($clubInfo && !$nation) {
+                                $startEntry['club_text'] = $clubInfo;
+                            }
+                            
+                            $starts[] = $startEntry;
+                        }
+                    } else {
+                        if ($debugMode) {
+                            error_log("Skipping competitor - missing rider or horse ID");
+                            error_log("Rider: " . json_encode($rider));
+                            error_log("Horse: " . json_encode($horse));
                         }
                     }
                 }
@@ -972,7 +1050,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                         return $p['first_name'] . ' ' . $p['last_name'] . ' (' . $p['country'] . ')';
                     }, $newPeople),
                     'horses' => array_map(function($h) {
-                        return $h['name'] . ' - ' . $h['fei_id'];
+                        return $h['name'] . ' - ' . ($h['fei_id'] ?? $h['foreign_id']);
                     }, $newHorses),
                     'teams' => array_map(function($t) use ($countryNames) {
                         $nation = str_replace('club_', '', $t['club']['foreign_id']);
@@ -1002,7 +1080,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         exit;
     }
         
-    // Action pour importer les résultats
+// Action pour importer les résultats
+
     if ($_POST['action'] === 'import_results') {
         if ($debugMode) {
             error_log("Import results action triggered");
@@ -1139,6 +1218,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                         error_log("Total competitors: " . count($competitors));
                     }
                     // D'abord, regrouper les cavaliers par nation et analyser leurs rounds
+                    $idx = 0;
                     foreach ($competitors as $competitor) {
                         $rider = $competitor['RIDER'] ?? [];
                         $nation = $rider['NATION'] ?? '';
@@ -1147,9 +1227,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                             error_log("  - RIDER data: " . json_encode($rider));
                             error_log("  - Nation found: '" . $nation . "'");
                         }
+                        $idx++;
+                        
                         if ($nation) {
+                            // Gérer les IDs temporaires pour les cavaliers nationaux
                             $riderFeiId = $rider['RFEI_ID'] ?? null;
                             $horseFeiId = $competitor['HORSE']['HFEI_ID'] ?? null;
+                            
+                            // Si pas de FEI ID, créer les mêmes IDs temporaires que dans import_startlists
+                            if (!$riderFeiId && isset($rider['RNAME'])) {
+                                $riderFeiId = 'TEMP_R_' . $eventId . '_' . md5($rider['RNAME']);
+                            }
+                            if (!$horseFeiId && isset($competitor['HORSE']['HNAME'])) {
+                                $horseNumber = $competitor['HORSE']['HNR'] ?? '';
+                                $horseFeiId = 'TEMP_H_' . $eventId . '_' . md5($competitor['HORSE']['HNAME'] . '_' . $horseNumber);
+                            }
+                            
                             $resultDetails = $competitor['RESULT'] ?? [];
                             
                             // Vérifier quels rounds ce cavalier a fait
@@ -1231,7 +1324,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                             } else if (count($ridersWithRound3) == 0 && $debugMode) {
                                 error_log("No round 3 detected for team '$nation' - no skip_rounds[3] needed");
                             }
-                   
                         }
                     }
                     
@@ -1244,10 +1336,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                     $rider = $competitor['RIDER'] ?? [];
                     $horse = $competitor['HORSE'] ?? [];
                     
+                    // Gérer les IDs pour les cavaliers nationaux
                     $riderFeiId = $rider['RFEI_ID'] ?? null;
                     $horseFeiId = $horse['HFEI_ID'] ?? null;
+                    $riderName = $rider['RNAME'] ?? '';
+                    $horseName = $horse['HNAME'] ?? '';
+                    $horseNumber = $horse['HNR'] ?? '';
+                    
+                    // Créer des IDs temporaires si nécessaire (même logique que import_startlists)
+                    if (!$riderFeiId && $riderName) {
+                        $riderFeiId = 'TEMP_R_' . $eventId . '_' . md5($riderName);
+                        if ($debugMode) {
+                            error_log("Using temporary rider ID for results: $riderFeiId for $riderName");
+                        }
+                    }
+                    
+                    if (!$horseFeiId && $horseName) {
+                        $horseFeiId = 'TEMP_H_' . $eventId . '_' . md5($horseName . '_' . $horseNumber);
+                        if ($debugMode) {
+                            error_log("Using temporary horse ID for results: $horseFeiId for $horseName");
+                        }
+                    }
                     
                     if (!$riderFeiId || !$horseFeiId) {
+                        if ($debugMode) {
+                            error_log("Skipping result - missing rider or horse ID after temporary ID generation");
+                            error_log("Rider data: " . json_encode($rider));
+                            error_log("Horse data: " . json_encode($horse));
+                        }
                         continue;
                     }
 

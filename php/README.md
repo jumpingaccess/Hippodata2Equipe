@@ -332,6 +332,7 @@ For any questions or issues:
 - Added event logo from Hippodata on extension
 - Added logo on competitions with team, lln, nations cup, equipe in the NAME 
 - Added automatic team class checkbox checked if competition NAME has team, lln, nations cup, equipe
+- Added import capacities for National competitions 
 
 ### Version 1.1.0 (10/08/2025)
 - Added skip_rounds support for team competitions
