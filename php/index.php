@@ -266,6 +266,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     }
     
 // Action modifiée pour importer sélectivement
+
     if ($_POST['action'] === 'import_selected') {
         $showId = $_POST['show_id'] ?? '';
         $apiKey = $_POST['api_key'] ?? '';
@@ -313,6 +314,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             $startlistsToProcess = [];
             $resultsToProcess = [];
             $counter = 1;
+            $ordCounter = 0; // Compteur ord démarrant à 0
             
             foreach ($selections as $selection) {
                 $classId = $selection['class_id'];
@@ -324,12 +326,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                 if ($selection['import_class']) {
                     $name = !empty($classData['NAME']) ? $classData['NAME'] : $classData['SPONSOR'];
                     
+                    // Extraire l'heure depuis DATETIME
+                    $klock = '';
+                    if (!empty($classData['DATETIME'])) {
+                        // Format: "2025-02-12 09:00:00"
+                        $dateTime = new DateTime($classData['DATETIME']);
+                        $klock = $dateTime->format('H:i'); // Format HH:MM
+                    }
+                    
                     $classToImport = [
                         'foreign_id' => (string)$classData['ID'],
                         'clabb' => 'HD-' . $counter,
                         'klass' => $name,
                         'oeverskr1' => $name,
                         'datum' => $classData['DATE'],
+                        'klock' => $klock, // Heure au format HH:MM
+                        'ord' => $ordCounter, // Compteur démarrant à 0
                         'tavlingspl' => $classData['CATEGORY'] ?? '',
                         'z' => 'H',
                         'x' => 'I',
@@ -350,6 +362,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                     
                     $classesToImport[] = $classToImport;
                     $counter++;
+                    $ordCounter++; // Incrémenter le compteur ord
                     
                     $results['classes'][] = [
                         'foreign_id' => $classData['ID'],
@@ -365,7 +378,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                         'foreign_id' => $classData['ID'],
                         'class_id' => $classData['NR'] ?? $classData['ID'],
                         'name' => !empty($classData['NAME']) ? $classData['NAME'] : $classData['SPONSOR'],
-                        'is_team' => $selection['team_class'] // Ajouter cette ligne si manquante
+                        'is_team' => $selection['team_class']
                     ];
                 }
                 
