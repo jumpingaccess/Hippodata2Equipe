@@ -328,6 +328,9 @@ For any questions or issues:
 
 ## Changelog
 
+### Version 1.1.2 (11/08/2025)
+- Visual improvements on classes screen, checkboxes and import processing
+
 ### Version 1.1.1 (10/08/2025)
 - Added event logo from Hippodata on extension
 - Added logo on competitions with team, lln, nations cup, equipe in the NAME 
