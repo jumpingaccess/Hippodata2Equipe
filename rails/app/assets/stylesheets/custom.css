@@ -181,19 +181,37 @@
     .classes-table {
         font-size: 12px;
     }
-    
+
     .classes-table th,
     .classes-table td {
         padding: 5px;
     }
-    
+
     .action-buttons {
         text-align: center;
     }
-    
+
     .action-buttons .btn {
         display: block;
         width: 100%;
         margin: 10px 0;
     }
+}
+
+/* Label styles (for version badge) */
+.label {
+    display: inline-block;
+    padding: 0.25em 0.6em;
+    font-size: 75%;
+    font-weight: 700;
+    line-height: 1;
+    text-align: center;
+    white-space: nowrap;
+    vertical-align: baseline;
+    border-radius: 0.25rem;
+}
+
+.label-success {
+    color: #fff;
+    background-color: #28a745;
 }
