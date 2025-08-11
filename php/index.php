@@ -1947,6 +1947,7 @@ if ($decoded && isset($decoded->payload->target)) {
             
             // Afficher les infos de l'event
 
+
             function displayEventInfo(data) {
                 // Construire les URLs possibles du logo
                 var currentYear = new Date().getFullYear();
@@ -2000,9 +2001,16 @@ if ($decoded && isset($decoded->payload->target)) {
                         );
                     }
                 );
-                            
-                const tbody = $('#classesTableBody');
-                tbody.empty();
+                
+                // Vider le conteneur des classes
+                $('#classesTable').hide();
+                $('#classesTableBody').empty();
+                
+                // Créer un nouveau conteneur pour l'affichage groupé par date
+                if ($('#groupedClassesContainer').length === 0) {
+                    $('#classesTable').after('<div id="groupedClassesContainer"></div>');
+                }
+                $('#groupedClassesContainer').empty();
                 
                 // Afficher le spinner
                 $('#loading-status').show();
@@ -2020,70 +2028,129 @@ if ($decoded && isset($decoded->payload->target)) {
                     success: function(response) {
                         const imported = response.existing || { classes: [], startlists: [], results: [] };
                         
+                        // Grouper les classes par date
+                        const classesByDate = {};
                         data.classes.forEach(function(cls, index) {
-                            const row = $('<tr>');
-                            const foreignId = cls.id.toString();
-                            // Définir isTeamClass ICI, au début de la boucle
-                            var isTeamClass = cls.TEAM_CLASS === "true" || cls.TEAM_CLASS === true;
-                            // Vérifier si déjà importé
-                            const isClassImported = imported.classes.includes(foreignId);
-                            const isStartlistImported = imported.startlists.includes(foreignId);
-                            const isResultImported = imported.results.includes(foreignId);
-                            
-                            const classNameLower = cls.name.toLowerCase();
-                            const teamKeywords = ['team', 'lln', 'nations cup', 'equipe', 'teams'];
-                            const isTeamInName = teamKeywords.some(keyword => classNameLower.includes(keyword));
-                            const teamIndicator = isTeamInName ? '<img src="R.webp" width="45">' : '';
-
-                            row.append('<td>' + cls.nr + ' ' + cls.name + teamIndicator + '</td>');
-                            row.append('<td>' + cls.date + '</td>');
-
-                            var hasTeamStarts = false;
-                            if (isTeamClass && existingData.teamStarts && existingData.teamStarts.indexOf(cls.id) !== -1) {
-                                hasTeamStarts = true;
+                            if (!classesByDate[cls.date]) {
+                                classesByDate[cls.date] = [];
                             }
-
-                            // Class import
-                            row.append('<td>' + (isClassImported ? 
-                                '<i class="fa-solid fa-circle-check fa-lg" style="color:rgb(24, 141, 8);" title="Already imported" ></i>' : 
-                                '<input type="checkbox" class="class-import" data-class-id="' + cls.id + '" data-index="' + index + '">') + '</td>');
-                            
-                            // Startlist import
-                            row.append('<td>' + (isStartlistImported ? 
-                                '<i class="fa-solid fa-circle-check fa-lg" style="color: rgb(24, 141, 8);" title="Already imported' + (hasTeamStarts ? ' (with teams)' : '') + '"></i>' : 
-                                '<input type="checkbox" class="startlist-import" data-class-id="' + cls.id + '" data-index="' + index + '" ' + 
-                                (!isClassImported ? 'title="Import class first"' : '') + '>') + '</td>');
-
-                            // Result import
-                            row.append('<td>' + (isResultImported ? 
-                                '<i class="fa-solid fa-circle-check fa-lg" style="color: rgb(24, 141, 8);" title="Already imported"></i>' : 
-                                '<input type="checkbox" class="result-import" data-class-id="' + cls.id + '" data-index="' + index + '" ' + 
-                                (!isClassImported ? 'title="Import class first"' : '') + '>') + '</td>');
-                            
-                            // Team class - toujours disponible
-                            row.append('<td><input type="checkbox" class="team-class" data-class-id="' + cls.id + '" data-index="' + index + '"' + (isTeamInName ? ' checked' : '') + '></td>');
-                            
-                            // FEI Article - toujours disponible
-                            row.append('<td><select class="fei-article" data-class-id="' + cls.id + '" data-index="' + index + '">' + $('#selectAllArticle').html() + '</select></td>');
-                            
-                            tbody.append(row);
+                            cls.index = index; // Stocker l'index original
+                            classesByDate[cls.date].push(cls);
                         });
+                        
+                        // Trier les dates
+                        const sortedDates = Object.keys(classesByDate).sort();
+                        
+                        // Créer le HTML pour chaque groupe de date
+                        let groupedHtml = '';
+                        
+                        sortedDates.forEach(function(date) {
+                            // Formater la date de YYYY-MM-DD vers DD-MM-YYYY
+                            const dateParts = date.split('-');
+                            const formattedDate = dateParts[2] + '-' + dateParts[1] + '-' + dateParts[0];
+                            
+                            groupedHtml += '<div class="date-group" style="margin-bottom: 30px;">';
+                            groupedHtml += '<h5 style="background: #f0f0f0; padding: 10px; margin: 20px 0 10px 0; border-left: 4px solid #0f2f66;">Date : ' + formattedDate + '</h5>';
+                            groupedHtml += '<div class="classes-list" style="padding-left: 20px;">';
+                            
+                            classesByDate[date].forEach(function(cls) {
+                                const foreignId = cls.id.toString();
+                                const isClassImported = imported.classes.includes(foreignId);
+                                const isStartlistImported = imported.startlists.includes(foreignId);
+                                const isResultImported = imported.results.includes(foreignId);
+                                
+                                const classNameLower = cls.name.toLowerCase();
+                                const teamKeywords = ['team', 'lln', 'nations cup', 'equipe', 'teams'];
+                                const isTeamInName = teamKeywords.some(keyword => classNameLower.includes(keyword));
+                                const teamIndicator = isTeamInName ? ' <img src="R.webp" width="35" style="vertical-align: middle;">' : '';
+                                
+                                groupedHtml += '<div class="class-item" style="margin: 10px 0; padding: 8px; background: #fff; border: 1px solid #ddd; border-radius: 4px;">';
+                                groupedHtml += '<div style="display: flex; align-items: center; gap: 10px;">';
+                                
+                                // Checkbox principal pour la classe
+                                if (isClassImported) {
+                                    groupedHtml += '<i class="fa-solid fa-circle-check fa-lg" style="color:rgb(24, 141, 8); width: 20px;" title="Class already imported"></i>';
+                                } else {
+                                    groupedHtml += '<input type="checkbox" class="class-checkbox" data-class-id="' + cls.id + '" data-index="' + cls.index + '">';
+                                }
+                                
+                                groupedHtml += '<span style="flex: 1;"><strong>' + cls.nr + '</strong> ' + cls.name + teamIndicator + '</span>';
+                                
+                                // Indicateurs d'import pour startlist et results
+                                groupedHtml += '<div class="import-indicators" style="display: flex; gap: 15px; margin-left: auto;">';
+                                
+                                // Startlist
+                                if (isStartlistImported) {
+                                    groupedHtml += '<span title="Startlist imported"><i class="fa-solid fa-users" style="color: rgb(24, 141, 8);"></i></span>';
+                                } else {
+                                    groupedHtml += '<span title="Import startlist"><input type="checkbox" class="startlist-import-grouped" data-class-id="' + cls.id + '" data-index="' + cls.index + '"> <i class="fa-solid fa-users" style="color: #999;"></i></span>';
+                                }
+                                
+                                // Results
+                                if (isResultImported) {
+                                    groupedHtml += '<span title="Results imported"><i class="fa-solid fa-trophy" style="color: rgb(24, 141, 8);"></i></span>';
+                                } else {
+                                    groupedHtml += '<span title="Import results"><input type="checkbox" class="result-import-grouped" data-class-id="' + cls.id + '" data-index="' + cls.index + '"> <i class="fa-solid fa-trophy" style="color: #999;"></i></span>';
+                                }
+                                
+                                // Team checkbox
+                                groupedHtml += '<span title="Team competition"><input type="checkbox" class="team-class-grouped" data-class-id="' + cls.id + '" data-index="' + cls.index + '"' + (isTeamInName ? ' checked' : '') + '> <i class="fa-solid fa-people-group" style="color: #666;"></i></span>';
+                                
+                                // FEI Article (caché par défaut)
+                                groupedHtml += '<select class="fei-article-grouped" data-class-id="' + cls.id + '" data-index="' + cls.index + '" style="display: none;">' + $('#selectAllArticle').html() + '</select>';
+                                
+                                groupedHtml += '</div>';
+                                groupedHtml += '</div>';
+                                groupedHtml += '</div>';
+                            });
+                            
+                            groupedHtml += '</div>';
+                            groupedHtml += '<hr style="border: none; border-top: 2px dashed #ddd; margin: 20px 0;">';
+                            groupedHtml += '</div>';
+                        });
+                        
+                        // Ajouter des boutons de sélection globale
+                        const selectionButtons = '<div style="margin: 20px 0; padding: 15px; background: #f8f9fa; border-radius: 5px;">' +
+                            '<h6>Quick Selection:</h6>' +
+                            '<div style="display: flex; gap: 10px; flex-wrap: wrap;">' +
+                            '<button type="button" class="btn btn-sm btn-outline-primary" id="selectAllClassesGrouped">Select All Classes</button>' +
+                            '<button type="button" class="btn btn-sm btn-outline-info" id="selectAllStartlistsGrouped">Select All Startlists</button>' +
+                            '<button type="button" class="btn btn-sm btn-outline-success" id="selectAllResultsGrouped">Select All Results</button>' +
+                            '<button type="button" class="btn btn-sm btn-outline-warning" id="selectAllTeamGrouped">Mark All as Team</button>' +
+                            '<button type="button" class="btn btn-sm btn-outline-secondary" id="clearAllGrouped">Clear All</button>' +
+                            '</div>' +
+                            '</div>';
+                        
+                        $('#groupedClassesContainer').html(selectionButtons + groupedHtml);
+                        
+                        // Gérer les événements des boutons de sélection
+                        $('#selectAllClassesGrouped').on('click', function() {
+                            $('.class-checkbox').prop('checked', true);
+                        });
+                        
+                        $('#selectAllStartlistsGrouped').on('click', function() {
+                            $('.startlist-import-grouped').prop('checked', true);
+                        });
+                        
+                        $('#selectAllResultsGrouped').on('click', function() {
+                            $('.result-import-grouped').prop('checked', true);
+                        });
+                        
+                        $('#selectAllTeamGrouped').on('click', function() {
+                            $('.team-class-grouped').prop('checked', true);
+                        });
+                        
+                        $('#clearAllGrouped').on('click', function() {
+                            $('.class-checkbox, .startlist-import-grouped, .result-import-grouped, .team-class-grouped').prop('checked', false);
+                        });
+                        
+                        // Stocker les données des classes pour référence
+                        window.classesData = data.classes;
                     },
                     error: function() {
-                        // En cas d'erreur, afficher quand même le tableau sans statut
-                        data.classes.forEach(function(cls, index) {
-                            const row = $('<tr>');
-                            
-                            row.append('<td>' + cls.nr + ' ' + cls.name + '</td>');
-                            row.append('<td>' + cls.date + '</td>');
-                            row.append('<td><input type="checkbox" class="class-import" data-class-id="' + cls.id + '" data-index="' + index + '"></td>');
-                            row.append('<td><input type="checkbox" class="startlist-import" data-class-id="' + cls.id + '" data-index="' + index + '"></td>');
-                            row.append('<td><input type="checkbox" class="result-import" data-class-id="' + cls.id + '" data-index="' + index + '"></td>');
-                            row.append('<td><input type="checkbox" class="team-class" data-class-id="' + cls.id + '" data-index="' + index + '"></td>');
-                            row.append('<td><select class="fei-article" data-class-id="' + cls.id + '" data-index="' + index + '">' + $('#selectAllArticle').html() + '</select></td>');
-                            
-                            tbody.append(row);
-                        });
+                        // En cas d'erreur, afficher quand même les classes sans statut d'import
+                        // Code similaire mais sans les indicateurs d'import...
+                        $('#loading-status').hide();
                     },
                     complete: function() {
                         // Masquer le spinner
@@ -2130,34 +2197,39 @@ if ($decoded && isset($decoded->payload->target)) {
             });
             
             // Import des sélections
+            // Modifier le gestionnaire du bouton import pour gérer le nouvel affichage groupé
+            // Remplacer le gestionnaire $('#importSelectedButton').on('click', ...) par :
+
             $('#importSelectedButton').on('click', function() {
                 const selections = [];
                 
-                $('#classesTableBody tr').each(function(index) {
-                    const row = $(this);
-                    const classData = currentEventData.classes[index];
-                    
-                    // Vérifier d'abord si les checkboxes existent (pas remplacées par des coches)
-                    const classCheckbox = row.find('.class-import');
-                    const startlistCheckbox = row.find('.startlist-import');
-                    const resultCheckbox = row.find('.result-import');
-                    
-                    const selection = {
-                        class_id: classData.id,
-                        class_nr: classData.nr,
-                        class_name: classData.name,
-                        import_class: classCheckbox.length > 0 && classCheckbox.is(':checked'),
-                        import_startlist: startlistCheckbox.length > 0 && startlistCheckbox.is(':checked'),
-                        import_results: resultCheckbox.length > 0 && resultCheckbox.is(':checked'),
-                        team_class: row.find('.team-class').is(':checked'),
-                        fei_article: row.find('.fei-article').val()
-                    };
-                    
-                    // Ajouter seulement si au moins une option est sélectionnée
-                    if (selection.import_class || selection.import_startlist || selection.import_results) {
-                        selections.push(selection);
-                    }
-                });
+                // Utiliser les données stockées globalement
+                if (window.classesData) {
+                    window.classesData.forEach(function(classData, index) {
+                        // Récupérer les valeurs depuis le nouvel affichage groupé
+                        const classCheckbox = $('.class-checkbox[data-index="' + index + '"]');
+                        const startlistCheckbox = $('.startlist-import-grouped[data-index="' + index + '"]');
+                        const resultCheckbox = $('.result-import-grouped[data-index="' + index + '"]');
+                        const teamCheckbox = $('.team-class-grouped[data-index="' + index + '"]');
+                        const feiSelect = $('.fei-article-grouped[data-index="' + index + '"]');
+                        
+                        const selection = {
+                            class_id: classData.id,
+                            class_nr: classData.nr,
+                            class_name: classData.name,
+                            import_class: classCheckbox.length > 0 && classCheckbox.is(':checked'),
+                            import_startlist: startlistCheckbox.length > 0 && startlistCheckbox.is(':checked'),
+                            import_results: resultCheckbox.length > 0 && resultCheckbox.is(':checked'),
+                            team_class: teamCheckbox.is(':checked'),
+                            fei_article: feiSelect.val() || ''
+                        };
+                        
+                        // Ajouter seulement si au moins une option est sélectionnée
+                        if (selection.import_class || selection.import_startlist || selection.import_results) {
+                            selections.push(selection);
+                        }
+                    });
+                }
                 
                 if (selections.length === 0) {
                     alert('Please select at least one import option');
@@ -2172,88 +2244,289 @@ if ($decoded && isset($decoded->payload->target)) {
             function startImport() {
                 $('#selectionStep').hide();
                 $('#resultsStep').show();
-                $('#importProgress').html('<div class="progress-section"><p>Starting import process...</p></div>');
+                
+                // Créer une vraie barre de progression
+                $('#importProgress').html(
+                    '<div class="progress-container">' +
+                    '<h4>Import Progress</h4>' +
+                    '<div class="progress-bar-wrapper">' +
+                    '<div class="progress-bar" id="mainProgressBar">' +
+                    '<div class="progress-bar-fill" style="width: 0%"></div>' +
+                    '<span class="progress-text">0%</span>' +
+                    '</div>' +
+                    '</div>' +
+                    '<div class="progress-status" id="progressStatus">Initializing...</div>' +
+                    '</div>'
+                );
                 
                 // Déterminer ce qui doit être importé
                 importOptions.classes = currentSelections.some(s => s.import_class);
                 importOptions.startlists = currentSelections.some(s => s.import_startlist);
                 importOptions.results = currentSelections.some(s => s.import_results);
                 
-                // Ajouter le spinner pour l'import des classes
-                if (importOptions.classes) {
-                    $('#importProgress').append(
-                        '<div class="progress-section" id="classesImportSection">' +
-                        '<h5>Importing Classes</h5>' +
-                        '<div class="text-center">' +
-                        '<i class="fa fa-spinner fa-spin fa-2x text-primary"></i>' +
-                        '<p>Processing classes import...</p>' +
-                        '</div>' +
-                        '</div>'
-                    );
+                // Calculer le nombre total d'étapes
+                let totalSteps = 0;
+                let currentStep = 0;
+                
+                if (importOptions.classes) totalSteps++;
+                if (importOptions.startlists) totalSteps++;
+                if (importOptions.results) totalSteps++;
+                
+                // Fonction pour mettre à jour la progression
+                function updateProgress(step, status) {
+                    currentStep = step;
+                    const percentage = Math.round((currentStep / totalSteps) * 100);
+                    $('#mainProgressBar .progress-bar-fill').css('width', percentage + '%');
+                    $('#mainProgressBar .progress-text').text(percentage + '%');
+                    $('#progressStatus').text(status);
                 }
+                
+                // Commencer l'import des classes
+                if (importOptions.classes) {
+                    updateProgress(0.5, 'Importing classes...');
+                    
+                    $.ajax({
+                        url: window.location.href,
+                        type: 'POST',
+                        data: {
+                            action: 'import_selected',
+                            show_id: $('#showId').val(),
+                            selections: JSON.stringify(currentSelections),
+                            api_key: '<?php echo $decoded->api_key ?? ''; ?>',
+                            meeting_url: '<?php echo $decoded->payload->meeting_url ?? ''; ?>'
+                        },
+                        dataType: 'json',
+                        success: function(response) {
+                            if (response.success) {
+                                updateProgress(1, 'Classes imported successfully');
+                                
+                                // Ajouter les résultats détaillés sous la barre
+                                displayImportResults(response);
+                                
+                                // Collecter les startlists et résultats à traiter
+                                const allStartlistsToProcess = [];
+                                const allResultsToProcess = [];
+                                
+                                currentSelections.forEach(function(sel) {
+                                    if (sel.import_startlist) {
+                                        allStartlistsToProcess.push({
+                                            foreign_id: sel.class_id,
+                                            class_id: sel.class_nr,
+                                            name: sel.class_name,
+                                            is_team: sel.team_class
+                                        });
+                                    }
+                                    if (sel.import_results) {
+                                        allResultsToProcess.push({
+                                            foreign_id: sel.class_id,
+                                            class_id: sel.class_nr,
+                                            name: sel.class_name,
+                                            is_team: sel.team_class
+                                        });
+                                    }
+                                });
+                                
+                                // Continuer avec les startlists
+                                if (allStartlistsToProcess.length > 0) {
+                                    setTimeout(function() {
+                                        processStartlistsWithProgress(response.event_id, allStartlistsToProcess, currentStep);
+                                    }, 500);
+                                } else if (allResultsToProcess.length > 0) {
+                                    setTimeout(function() {
+                                        processResultsWithProgress(response.event_id, allResultsToProcess, currentStep);
+                                    }, 500);
+                                }
+                            } else {
+                                updateProgress(currentStep, 'Error: ' + response.error);
+                                $('#importProgress').append('<p class="alert alert-danger mt-3">Error: ' + response.error + '</p>');
+                            }
+                        },
+                        error: function(xhr, status, error) {
+                            updateProgress(currentStep, 'Request failed');
+                            $('#importProgress').append('<p class="alert alert-danger mt-3">Request failed: ' + error + '</p>');
+                        }
+                    });
+                } else if (importOptions.startlists) {
+                    // Si on commence directement par les startlists
+                    const startlistsToProcess = currentSelections
+                        .filter(s => s.import_startlist)
+                        .map(s => ({
+                            foreign_id: s.class_id,
+                            class_id: s.class_nr,
+                            name: s.class_name,
+                            is_team: s.team_class
+                        }));
+                    
+                    processStartlistsWithProgress($('#showId').val(), startlistsToProcess, 0);
+                } else if (importOptions.results) {
+                    // Si on a seulement des résultats
+                    const resultsToProcess = currentSelections
+                        .filter(s => s.import_results)
+                        .map(s => ({
+                            foreign_id: s.class_id,
+                            class_id: s.class_nr,
+                            name: s.class_name,
+                            is_team: s.team_class
+                        }));
+                    
+                    processResultsWithProgress($('#showId').val(), resultsToProcess, 0);
+                }
+            }
+            // Nouvelle fonction pour traiter les startlists avec progression
+            function processStartlistsWithProgress(eventId, startlistsToProcess, previousStep) {
+                const totalSteps = (importOptions.classes ? 1 : 0) + 
+                                (importOptions.startlists ? 1 : 0) + 
+                                (importOptions.results ? 1 : 0);
+                const currentStepBase = previousStep + 0.5;
+                
+                function updateProgress(status) {
+                    const percentage = Math.round((currentStepBase / totalSteps) * 100);
+                    $('#mainProgressBar .progress-bar-fill').css('width', percentage + '%');
+                    $('#mainProgressBar .progress-text').text(percentage + '%');
+                    $('#progressStatus').text(status);
+                }
+                
+                updateProgress('Fetching startlists from Hippodata...');
+                
+                // Ajouter la section des startlists
+                $('#importProgress').append(
+                    '<div class="progress-section" id="startlistsSection">' +
+                    '<h5>Startlists Import</h5>' +
+                    '<div id="startlistProgress"></div>' +
+                    '</div>'
+                );
+                
+                const startlistsWithTeamInfo = startlistsToProcess;
                 
                 $.ajax({
                     url: window.location.href,
                     type: 'POST',
                     data: {
-                        action: 'import_selected',
-                        show_id: $('#showId').val(),
-                        selections: JSON.stringify(currentSelections),
+                        action: 'import_startlists',
+                        event_id: eventId,
+                        competitions: JSON.stringify(startlistsWithTeamInfo),
                         api_key: '<?php echo $decoded->api_key ?? ''; ?>',
                         meeting_url: '<?php echo $decoded->payload->meeting_url ?? ''; ?>'
                     },
                     dataType: 'json',
                     success: function(response) {
                         if (response.success) {
-                            // Remplacer le spinner par les résultats
-                            if (importOptions.classes) {
-                                $('#classesImportSection').remove();
-                            }
-                            displayImportResults(response);
+                            updateProgress('Processing startlists data...');
+                            displayStartlistResults(response);
                             
-                            // Collecter toutes les startlists à traiter
-                            const allStartlistsToProcess = [];
-                            const allResultsToProcess = [];
-                            
-                            currentSelections.forEach(function(sel) {
-                                if (sel.import_startlist) {
-                                    allStartlistsToProcess.push({
-                                        foreign_id: sel.class_id,
-                                        class_id: sel.class_nr,
-                                        name: sel.class_name
-                                    });
-                                }
-                                if (sel.import_results) {
-                                    allResultsToProcess.push({
-                                        foreign_id: sel.class_id,
-                                        class_id: sel.class_nr,
-                                        name: sel.class_name
-                                    });
-                                }
-                            });
-                            
-                            // Si on a des startlists à traiter
-                            if (allStartlistsToProcess.length > 0) {
-                                setTimeout(function() {
-                                    processStartlists(response.event_id, allStartlistsToProcess);
-                                }, 1000);
-                            } else if (allResultsToProcess.length > 0) {
-                                // Si on a seulement des résultats à traiter
-                                setTimeout(function() {
-                                    processResults(response.event_id, allResultsToProcess);
-                                }, 1000);
+                            if (response.batchData && response.batchData.length > 0) {
+                                updateProgress('Sending startlists to Equipe...');
+                                
+                                importBatchesToEquipe(response.batchData, function() {
+                                    // Mise à jour finale pour les startlists
+                                    const finalStep = previousStep + 1;
+                                    const percentage = Math.round((finalStep / totalSteps) * 100);
+                                    $('#mainProgressBar .progress-bar-fill').css('width', percentage + '%');
+                                    $('#mainProgressBar .progress-text').text(percentage + '%');
+                                    $('#progressStatus').text('Startlists imported successfully');
+                                    
+                                    // Continuer avec les résultats si nécessaire
+                                    if (importOptions.results) {
+                                        const resultsToProcess = currentSelections
+                                            .filter(s => s.import_results)
+                                            .map(s => ({
+                                                foreign_id: s.class_id,
+                                                class_id: s.class_nr,
+                                                name: s.class_name,
+                                                is_team: s.team_class
+                                            }));
+                                        
+                                        if (resultsToProcess.length > 0) {
+                                            setTimeout(function() {
+                                                processResultsWithProgress(eventId, resultsToProcess, finalStep);
+                                            }, 500);
+                                        }
+                                    } else {
+                                        // Import terminé
+                                        $('#progressStatus').text('Import completed successfully!');
+                                        showFinalSummary();
+                                    }
+                                });
                             }
                         } else {
-                            $('#importProgress').html('<p class="alert alert-danger">Error: ' + response.error + '</p>');
+                            updateProgress('Error processing startlists');
+                            $('#startlistProgress').html('<p class="alert alert-danger">Error: ' + response.error + '</p>');
                         }
                     },
                     error: function(xhr, status, error) {
-                        $('#classesImportSection').remove();
-                        $('#importProgress').html('<p class="alert alert-danger">Request failed: ' + error + '</p>');
+                        updateProgress('Failed to fetch startlists');
+                        $('#startlistProgress').html('<p class="alert alert-danger">Request failed: ' + error + '</p>');
                     }
                 });
             }
-            
+
+            // Nouvelle fonction pour traiter les résultats avec progression
+            function processResultsWithProgress(eventId, resultsToProcess, previousStep) {
+                const totalSteps = (importOptions.classes ? 1 : 0) + 
+                                (importOptions.startlists ? 1 : 0) + 
+                                (importOptions.results ? 1 : 0);
+                const currentStepBase = previousStep + 0.5;
+                
+                function updateProgress(status) {
+                    const percentage = Math.round((currentStepBase / totalSteps) * 100);
+                    $('#mainProgressBar .progress-bar-fill').css('width', percentage + '%');
+                    $('#mainProgressBar .progress-text').text(percentage + '%');
+                    $('#progressStatus').text(status);
+                }
+                
+                updateProgress('Fetching results from Hippodata...');
+                
+                // Ajouter la section des résultats
+                $('#importProgress').append(
+                    '<div class="progress-section" id="resultsSection">' +
+                    '<h5>Results Import</h5>' +
+                    '<div id="resultsProgress"></div>' +
+                    '</div>'
+                );
+                
+                const resultsWithTeamInfo = resultsToProcess;
+                
+                $.ajax({
+                    url: window.location.href,
+                    type: 'POST',
+                    data: {
+                        action: 'import_results',
+                        event_id: eventId,
+                        competitions: JSON.stringify(resultsWithTeamInfo),
+                        api_key: '<?php echo $decoded->api_key ?? ''; ?>',
+                        meeting_url: '<?php echo $decoded->payload->meeting_url ?? ''; ?>'
+                    },
+                    dataType: 'json',
+                    success: function(response) {
+                        if (response.success) {
+                            updateProgress('Processing results data...');
+                            displayResultsProgress(response);
+                            
+                            if (response.batchData && response.batchData.length > 0) {
+                                updateProgress('Sending results to Equipe...');
+                                
+                                importResultsBatchesToEquipeWithProgress(response.batchData, function() {
+                                    // Mise à jour finale
+                                    const finalStep = previousStep + 1;
+                                    const percentage = Math.round((finalStep / totalSteps) * 100);
+                                    $('#mainProgressBar .progress-bar-fill').css('width', percentage + '%');
+                                    $('#mainProgressBar .progress-text').text(percentage + '%');
+                                    $('#progressStatus').text('Import completed successfully!');
+                                    
+                                    showFinalSummary();
+                                });
+                            }
+                        } else {
+                            updateProgress('Error processing results');
+                            $('#resultsProgress').html('<p class="alert alert-danger">Error: ' + response.error + '</p>');
+                        }
+                    },
+                    error: function(xhr, status, error) {
+                        updateProgress('Failed to fetch results');
+                        $('#resultsProgress').html('<p class="alert alert-danger">Request failed: ' + error + '</p>');
+                    }
+                });
+            }                        
             // Afficher les résultats de l'import
             function displayImportResults(data) {
                 let html = '<div class="progress-section">';
@@ -2683,7 +2956,63 @@ if ($decoded && isset($decoded->payload->target)) {
                     }
                 }
             }
-            
+            // Modifier importResultsBatchesToEquipe pour accepter un callback
+            function importResultsBatchesToEquipeWithProgress(batchDataArray, onCompleteCallback) {
+                let successCount = 0;
+                let failCount = 0;
+                let processed = 0;
+                const total = batchDataArray.length;
+                
+                batchDataArray.forEach(function(batch) {
+                    const transactionUuid = generateUuid();
+                    
+                    debugLog('Sending results batch for:', batch.competition);
+                    
+                    $.ajax({
+                        url: window.location.href,
+                        type: 'POST',
+                        data: {
+                            action: 'send_batch_to_equipe',
+                            batch_data: JSON.stringify(batch.data),
+                            api_key: '<?php echo $decoded->api_key ?? ''; ?>',
+                            meeting_url: '<?php echo $decoded->payload->meeting_url ?? ''; ?>',
+                            transaction_uuid: transactionUuid
+                        },
+                        dataType: 'json',
+                        success: function(response) {
+                            if (response.success) {
+                                successCount++;
+                                $('#result-' + batch.competition_foreign_id).removeClass('pending').addClass('success');
+                            } else {
+                                failCount++;
+                                $('#result-' + batch.competition_foreign_id).removeClass('pending').addClass('failed');
+                                debugLog('Results import failed for:', batch.competition);
+                                debugLog('Response:', response);
+                            }
+                            
+                            processed++;
+                            checkComplete();
+                        },
+                        error: function(xhr, status, error) {
+                            failCount++;
+                            $('#result-' + batch.competition_foreign_id).removeClass('pending').addClass('failed');
+                            debugLog('Request failed for results:', batch.competition);
+                            debugLog('Error:', error);
+                            
+                            processed++;
+                            checkComplete();
+                        }
+                    });
+                });
+                
+                function checkComplete() {
+                    if (processed === total) {
+                        if (typeof onCompleteCallback === 'function') {
+                            onCompleteCallback();
+                        }
+                    }
+                }
+            }
             // Importer les résultats vers Equipe
             function importResultsBatchesToEquipe(batchDataArray) {
                 let successCount = 0;

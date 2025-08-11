@@ -196,7 +196,270 @@
     font-weight: 600;
 }
 
-/* Tableau des classes */
+/* ========================================
+   AFFICHAGE GROUPÉ PAR DATE
+   ======================================== */
+
+/* Container pour l'affichage groupé */
+#groupedClassesContainer {
+    margin-top: 20px;
+}
+
+/* Groupe de date */
+.date-group {
+    margin-bottom: 30px;
+    animation: fadeIn 0.3s ease;
+}
+
+.date-group h5 {
+    background: linear-gradient(135deg, #f0f0f0 0%, #e8e8e8 100%);
+    padding: 12px 20px;
+    margin: 20px 0 15px 0;
+    border-left: 4px solid var(--equipe-secondary);
+    font-weight: 600;
+    font-size: 16px;
+    color: var(--equipe-primary);
+    border-radius: 0 6px 6px 0;
+    box-shadow: 0 2px 4px var(--equipe-shadow);
+}
+
+/* Liste des classes */
+.classes-list {
+    padding-left: 0;
+}
+
+/* Élément de classe individuel */
+.class-item {
+    margin: 10px 0;
+    padding: 15px 20px;
+    background: white;
+    border: 1px solid var(--equipe-border);
+    border-radius: 8px;
+    transition: all 0.2s ease;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.class-item:hover {
+    border-color: var(--equipe-secondary);
+    box-shadow: 0 3px 8px rgba(52, 152, 219, 0.15);
+}
+
+.class-item > div {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 14px;
+}
+
+.class-item strong {
+    color: var(--equipe-secondary);
+    font-weight: 600;
+    margin-right: 5px;
+}
+
+/* Checkbox principal de classe */
+.class-checkbox {
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+    position: relative;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+    background: white;
+    border: 2px solid var(--equipe-border);
+    border-radius: 4px;
+    transition: all 0.2s ease;
+    flex-shrink: 0;
+}
+
+.class-checkbox:checked {
+    background-color: var(--equipe-secondary);
+    border-color: var(--equipe-secondary);
+}
+
+.class-checkbox:checked::after {
+    content: '✓';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: white;
+    font-size: 12px;
+    font-weight: bold;
+}
+
+/* Indicateurs d'import */
+.import-indicators {
+    display: flex;
+    gap: 20px;
+    margin-left: auto;
+    align-items: center;
+}
+
+.import-indicators span {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    white-space: nowrap;
+}
+
+.import-indicators input[type="checkbox"] {
+    width: 14px;
+    height: 14px;
+    margin: 0;
+    cursor: pointer;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+    background: white;
+    border: 2px solid var(--equipe-border);
+    border-radius: 3px;
+    transition: all 0.2s ease;
+    position: relative;
+}
+
+.import-indicators input[type="checkbox"]:checked {
+    background-color: var(--equipe-secondary);
+    border-color: var(--equipe-secondary);
+}
+
+.import-indicators input[type="checkbox"]:checked::after {
+    content: '✓';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: white;
+    font-size: 10px;
+    font-weight: bold;
+}
+
+/* Icônes d'indicateurs */
+.import-indicators .fa-users {
+    font-size: 16px;
+}
+
+.import-indicators .fa-trophy {
+    font-size: 16px;
+}
+
+.import-indicators .fa-people-group {
+    font-size: 16px;
+}
+
+/* Select FEI Article caché */
+.fei-article-grouped {
+    display: none !important;
+}
+
+/* Ligne de séparation entre dates */
+.date-group hr {
+    border: none;
+    border-top: 2px dashed var(--equipe-border);
+    margin: 25px 0;
+    opacity: 0.5;
+}
+
+/* Boutons de sélection rapide */
+#groupedClassesContainer > div:first-child {
+    margin: 20px 0;
+    padding: 20px;
+    background: linear-gradient(135deg, #f8f9fa 0%, #f0f1f2 100%);
+    border-radius: 8px;
+    border: 1px solid var(--equipe-border);
+    box-shadow: 0 2px 4px var(--equipe-shadow);
+}
+
+#groupedClassesContainer h6 {
+    color: var(--equipe-primary);
+    font-weight: 600;
+    margin-bottom: 12px;
+    font-size: 15px;
+}
+
+/* Boutons de sélection */
+.btn-sm {
+    padding: 8px 16px;
+    font-size: 13px;
+}
+
+.btn-outline-primary,
+.btn-outline-info,
+.btn-outline-success,
+.btn-outline-warning,
+.btn-outline-secondary {
+    background: white;
+    border-width: 2px;
+    transition: all 0.2s ease;
+}
+
+.btn-outline-primary {
+    color: var(--equipe-secondary);
+    border-color: var(--equipe-secondary);
+}
+
+.btn-outline-primary:hover {
+    background-color: var(--equipe-secondary);
+    color: white;
+}
+
+.btn-outline-info {
+    color: var(--equipe-info);
+    border-color: var(--equipe-info);
+}
+
+.btn-outline-info:hover {
+    background-color: var(--equipe-info);
+    color: white;
+}
+
+.btn-outline-success {
+    color: var(--equipe-success);
+    border-color: var(--equipe-success);
+}
+
+.btn-outline-success:hover {
+    background-color: var(--equipe-success);
+    color: white;
+}
+
+.btn-outline-warning {
+    color: var(--equipe-warning);
+    border-color: var(--equipe-warning);
+}
+
+.btn-outline-warning:hover {
+    background-color: var(--equipe-warning);
+    color: white;
+}
+
+.btn-outline-secondary {
+    color: var(--equipe-dark);
+    border-color: var(--equipe-dark);
+}
+
+.btn-outline-secondary:hover {
+    background-color: var(--equipe-dark);
+    color: white;
+}
+
+/* Image indicateur d'équipe */
+.class-item img[src="R.webp"] {
+    vertical-align: middle;
+    margin-left: 5px;
+}
+
+/* ========================================
+   TABLEAU DES CLASSES (ANCIEN - CACHÉ)
+   ======================================== */
+
+/* Cache l'ancienne table */
+#classesTable {
+    display: none !important;
+}
+
 .classes-table {
     width: 100%;
     border-collapse: separate;
@@ -223,126 +486,9 @@
     border: none;
 }
 
-.classes-table th:first-child {
-    padding-left: 20px;
-}
-
-.classes-table th:last-child {
-    padding-right: 20px;
-}
-
-/* Ligne Select All */
-.select-all-row {
-    background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%) !important;
-}
-
-.select-all-row td {
-    padding: 14px 12px;
-    font-weight: 600;
-    color: var(--equipe-secondary);
-    border-bottom: 2px solid #90caf9;
-}
-
-.select-all-row td:first-child {
-    padding-left: 20px;
-}
-
-/* Lignes du tableau */
-.classes-table tbody tr {
-    border-bottom: 1px solid #f0f0f0;
-}
-
-.classes-table td {
-    padding: 14px 12px;
-    text-align: left;
-    font-size: 14px;
-    color: var(--equipe-dark);
-    vertical-align: middle;
-}
-
-.classes-table td:first-child {
-    padding-left: 20px;
-    font-weight: 500;
-    color: var(--equipe-primary);
-}
-
-/* Checkboxes */
-.classes-table input[type="checkbox"] {
-    width: 18px;
-    height: 18px;
-    cursor: pointer;
-    position: relative;
-    -webkit-appearance: none;
-    -moz-appearance: none;
-    appearance: none;
-    background: white;
-    border: 2px solid var(--equipe-border);
-    border-radius: 4px;
-    transition: all 0.2s ease;
-}
-
-.classes-table input[type="checkbox"]:checked {
-    background-color: var(--equipe-secondary);
-    border-color: var(--equipe-secondary);
-}
-
-.classes-table input[type="checkbox"]:checked::after {
-    content: '✓';
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    color: white;
-    font-size: 12px;
-    font-weight: bold;
-}
-
-.classes-table input[type="checkbox"]:hover {
-    border-color: var(--equipe-secondary);
-}
-
-.classes-table input[type="checkbox"]:disabled {
-    cursor: not-allowed;
-    opacity: 0.6;
-    background-color: #f5f5f5;
-}
-
-.classes-table input[type="checkbox"]:disabled:checked {
-    background-color: var(--equipe-success);
-    border-color: var(--equipe-success);
-}
-
-input[type="checkbox"][title]:hover {
-    cursor: help;
-}
-
-/* Select dropdowns */
-.classes-table select {
-    width: 100%;
-    padding: 8px 12px;
-    border: 1px solid var(--equipe-border);
-    border-radius: 6px;
-    font-size: 13px;
-    background-color: white;
-    cursor: pointer;
-    transition: all 0.2s ease;
-}
-
-.classes-table select:hover {
-    border-color: var(--equipe-secondary);
-}
-
-.classes-table select:focus {
-    outline: none;
-    border-color: var(--equipe-secondary);
-    box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
-}
-
-.classes-table select:disabled {
-    cursor: not-allowed;
-    opacity: 0.6;
-    background-color: #f5f5f5;
-}
+/* ========================================
+   SECTIONS DE PROGRESSION
+   ======================================== */
 
 /* Action buttons container */
 .action-buttons {
@@ -365,6 +511,12 @@ input[type="checkbox"][title]:hover {
     border-radius: 10px;
     box-shadow: 0 2px 4px var(--equipe-shadow);
     border: 1px solid var(--equipe-border);
+}
+
+.progress-section h5 {
+    margin-top: 0;
+    margin-bottom: 15px;
+    color: var(--equipe-primary);
 }
 
 .progress-item {
@@ -401,8 +553,13 @@ input[type="checkbox"][title]:hover {
     color: var(--equipe-primary);
 }
 
+/* ========================================
+   UTILITAIRES
+   ======================================== */
+
 /* Font Awesome icons */
-.fa-check {
+.fa-check,
+.fa-circle-check {
     font-size: 1.2em;
 }
 
@@ -432,16 +589,38 @@ input[type="checkbox"][title]:hover {
     margin-bottom: 1rem;
 }
 
+.me-2 {
+    margin-right: 0.5rem;
+}
+
 /* Loading spinner */
+#loading-status {
+    text-align: center;
+    padding: 20px;
+}
+
 .loading-spinner,
 .fa-spinner {
     display: inline-block;
     animation: spin 1s linear infinite;
 }
 
-/* Ligne avec compétition existante */
-.classes-table tbody tr.existing-competition {
-    background-color: rgba(52, 152, 219, 0.05);
+/* Label de version */
+.label {
+    display: inline-block;
+    padding: 0.25em 0.6em;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1;
+    text-align: center;
+    white-space: nowrap;
+    vertical-align: baseline;
+    border-radius: 0.25rem;
+}
+
+.label-success {
+    color: #fff;
+    background-color: var(--equipe-success);
 }
 
 /* Info box pour les données existantes */
@@ -460,7 +639,10 @@ input[type="checkbox"][title]:hover {
     font-weight: bold;
 }
 
-/* Animations */
+/* ========================================
+   ANIMATIONS
+   ======================================== */
+
 @keyframes slideDown {
     from {
         opacity: 0;
@@ -488,20 +670,200 @@ input[type="checkbox"][title]:hover {
     }
 }
 
-/* Responsive adjustments */
+/* ========================================
+   RESPONSIVE
+   ======================================== */
+
 @media (max-width: 768px) {
-    .classes-table {
+    /* Container principal */
+    .import-container {
+        padding: 15px;
+    }
+    
+    /* Event info */
+    #eventInfo {
+        flex-direction: column;
+    }
+    
+    #eventInfo div {
+        flex-direction: column !important;
+    }
+    
+    #logoContainer {
+        margin-bottom: 15px;
+    }
+    
+    /* Affichage groupé */
+    .class-item {
+        padding: 12px 15px;
+    }
+    
+    .class-item > div {
+        flex-wrap: wrap;
+    }
+    
+    .import-indicators {
+        width: 100%;
+        margin-top: 10px;
+        justify-content: space-between;
+    }
+    
+    .import-indicators span {
         font-size: 12px;
     }
     
-    .classes-table th,
-    .classes-table td {
-        padding: 10px 8px;
+    /* Boutons de sélection rapide */
+    #groupedClassesContainer > div:first-child div {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    
+    #groupedClassesContainer button {
+        width: 100%;
+        margin: 5px 0;
+    }
+    
+    /* Action buttons */
+    .action-buttons {
+        padding: 15px;
     }
     
     .action-buttons button {
         display: block;
         width: 100%;
         margin: 10px 0;
+    }
+    
+    /* Progress sections */
+    .progress-section {
+        padding: 15px;
+    }
+    
+    .progress-item {
+        padding: 12px;
+        font-size: 13px;
+    }
+}
+/* ========================================
+   BARRE DE PROGRESSION
+   ======================================== */
+
+.progress-container {
+    background: white;
+    padding: 30px;
+    border-radius: 10px;
+    box-shadow: 0 4px 6px var(--equipe-shadow);
+    margin-bottom: 20px;
+    text-align: center;
+}
+
+.progress-container h4 {
+    margin-top: 0;
+    margin-bottom: 20px;
+    color: var(--equipe-primary);
+    font-size: 22px;
+}
+
+.progress-bar-wrapper {
+    margin-bottom: 20px;
+}
+
+.progress-bar {
+    width: 100%;
+    height: 30px;
+    background-color: #e0e0e0;
+    border-radius: 15px;
+    overflow: hidden;
+    position: relative;
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.progress-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--equipe-secondary) 0%, #2980b9 100%);
+    transition: width 0.5s ease;
+    position: relative;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.progress-bar-fill::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(
+        45deg,
+        rgba(255, 255, 255, 0.2) 25%,
+        transparent 25%,
+        transparent 50%,
+        rgba(255, 255, 255, 0.2) 50%,
+        rgba(255, 255, 255, 0.2) 75%,
+        transparent 75%,
+        transparent
+    );
+    background-size: 30px 30px;
+    animation: progress-bar-stripes 1s linear infinite;
+}
+
+.progress-text {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: var(--equipe-primary);
+    font-weight: 600;
+    font-size: 14px;
+    text-shadow: 0 1px 2px rgba(255, 255, 255, 0.8);
+}
+
+.progress-status {
+    color: var(--equipe-dark);
+    font-size: 14px;
+    margin-top: 10px;
+}
+
+/* Animation des rayures */
+@keyframes progress-bar-stripes {
+    0% {
+        background-position: 0 0;
+    }
+    100% {
+        background-position: 30px 0;
+    }
+}
+
+/* Ajustement pour la section de progression existante */
+#importProgress .progress-section {
+    margin-top: 20px;
+}
+
+/* États de la barre selon le pourcentage */
+.progress-bar-fill[style*="width: 100%"] {
+    background: linear-gradient(90deg, var(--equipe-success) 0%, #229954 100%);
+}
+
+.progress-bar-fill[style*="width: 100%"]::after {
+    animation: none;
+    background: none;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .progress-container {
+        padding: 20px;
+    }
+    
+    .progress-container h4 {
+        font-size: 18px;
+    }
+    
+    .progress-bar {
+        height: 25px;
+    }
+    
+    .progress-text {
+        font-size: 12px;
     }
 }
