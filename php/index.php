@@ -1704,8 +1704,14 @@ if ($decoded && isset($decoded->payload->target)) {
 </head>
 <body class="extension">
     <div class="import-container">
-        <h3 style="display: inline-block; margin-right: 10px;">Import from Hippodata</h3>
-        <span class="label label-success">v<?php echo $_ENV['VERSION'];?></span>
+       <div style="display: flex; align-items: center; width: 100%; padding: 10px 0; border-bottom: 2px solid #e0e0e0; margin-bottom: 20px; position: relative;">
+            <h3 style="margin: 0 auto; display: flex; align-items: center; gap: 15px;">
+                <img src="H.png" height="60" class="me-2">
+                <i class="fa-solid fa-arrow-right fa-xl me-2" style="color: #0f2f66;"></i>
+                <img src="equipe.jpg" height="60">
+            </h3>
+            <span class="label label-success" style="position: absolute; right: 0;">v<?php echo $_ENV['VERSION'];?></span>
+        </div>
         
         <div id="alertMessage" style="display: none;"></div>
         
