@@ -1764,7 +1764,7 @@ if ($decoded && isset($decoded->payload->target)) {
                                 <option value="238.1.3">Table A. Not against the clock with jump off (238.1.3)</option>
                                 <option value="238.1.3">Table A. One round with two jump-offs (238.1.3)</option>
                                 <option style="background: #2980b9; color: #ffffff;" disabled>238.2</option>
-                                <option value="238.2.1">Table A. Against the clock, no jump off (238.2.1)</option>
+                                <option value="238.2.1">Table A. Against the clock, no jump off (238.2.1.1)</option>
                                 <option value="238.2.1b">Table A. One round against the clock equalty of faults and time jump off (238.2.1b)</option>
                                 <option value="238.2.2">Table A. One round with one jump off (238.2.2)</option>
                                 <option value="238.2.2 + 245.3">Table A against the clock with Immediate jump off (238.2.2 + 245.3)</option>
@@ -1947,7 +1947,6 @@ if ($decoded && isset($decoded->payload->target)) {
             
             // Afficher les infos de l'event
 
-
             function displayEventInfo(data) {
                 // Construire les URLs possibles du logo
                 var currentYear = new Date().getFullYear();
@@ -2096,8 +2095,8 @@ if ($decoded && isset($decoded->payload->target)) {
                                 // Team checkbox
                                 groupedHtml += '<span title="Team competition"><input type="checkbox" class="team-class-grouped" data-class-id="' + cls.id + '" data-index="' + cls.index + '"' + (isTeamInName ? ' checked' : '') + '> <i class="fa-solid fa-people-group" style="color: #666;"></i></span>';
                                 
-                                // FEI Article (caché par défaut)
-                                groupedHtml += '<select class="fei-article-grouped" data-class-id="' + cls.id + '" data-index="' + cls.index + '" style="display: none;">' + $('#selectAllArticle').html() + '</select>';
+                                // FEI Article dropdown
+                                groupedHtml += '<select class="fei-article-grouped" data-class-id="' + cls.id + '" data-index="' + cls.index + '" title="FEI Article">' + $('#selectAllArticle').html() + '</select>';
                                 
                                 groupedHtml += '</div>';
                                 groupedHtml += '</div>';
@@ -2118,6 +2117,11 @@ if ($decoded && isset($decoded->payload->target)) {
                             '<button type="button" class="btn btn-sm btn-outline-success" id="selectAllResultsGrouped">Select All Results</button>' +
                             '<button type="button" class="btn btn-sm btn-outline-warning" id="selectAllTeamGrouped">Mark All as Team</button>' +
                             '<button type="button" class="btn btn-sm btn-outline-secondary" id="clearAllGrouped">Clear All</button>' +
+                            '</div>' +
+                            '<div style="margin-top: 10px; display: flex; align-items: center; gap: 10px;">' +
+                            '<label style="margin: 0;">Set all FEI Articles to:</label>' +
+                            '<select id="selectAllArticleGrouped" class="form-control" style="width: 250px;">' + $('#selectAllArticle').html() + '</select>' +
+                            '<button type="button" class="btn btn-sm btn-primary" id="applyAllArticlesGrouped">Apply</button>' +
                             '</div>' +
                             '</div>';
                         
@@ -2142,6 +2146,12 @@ if ($decoded && isset($decoded->payload->target)) {
                         
                         $('#clearAllGrouped').on('click', function() {
                             $('.class-checkbox, .startlist-import-grouped, .result-import-grouped, .team-class-grouped').prop('checked', false);
+                        });
+                        
+                        // Gérer le bouton Apply pour les articles FEI
+                        $('#applyAllArticlesGrouped').on('click', function() {
+                            const selectedArticle = $('#selectAllArticleGrouped').val();
+                            $('.fei-article-grouped').val(selectedArticle);
                         });
                         
                         // Stocker les données des classes pour référence
